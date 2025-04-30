@@ -14,6 +14,7 @@ from plyer import notification
 import logging
 import subprocess
 import winsound
+import pygame
 
 # Constants
 CONFIG_FILE = "tabs_config.json"
@@ -64,7 +65,7 @@ class MonitorTab(QWidget):
                 new_url = "https://" + new_url
             self.url = new_url
             self.browser.load(QUrl(new_url))  # Load the new URL in the browser
-            self.log(f"URL updated to: {new_url}")
+            #self.log(f"URL updated to: {new_url}")
 
     def on_browser_url_changed(self, qurl):
         """Detect URL change in the browser and update the URL input field."""
@@ -178,11 +179,20 @@ class MonitorTab(QWidget):
         self.log(f"Notification triggered at {count} matches.")
 
     def play_sound(self):
-        """Play a sound on notification."""
-        if platform.system() == "Windows":
-            winsound.MessageBeep()
-        else:
-            subprocess.Popen(["paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga"])
+        sound_file = "alert.mp3"  # Ensure the file is in the correct location
+
+        if not os.path.exists(sound_file):
+            print(f"Error: {sound_file} not found.")
+            return
+
+        try:
+            # Initialize pygame mixer and play the sound
+            pygame.mixer.init()
+            pygame.mixer.music.load(sound_file)
+            pygame.mixer.music.play()
+            #print(f"Played sound: {sound_file}")
+        except Exception as e:
+            print(f"Error playing sound: {e}")
 
     def toggle_monitoring(self):
         """Toggle monitoring state."""
