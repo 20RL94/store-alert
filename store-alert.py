@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QHBoxLayout, QInputDialog, QMenu, QComboBox, QLabel
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineCookieStore
 from plyer import notification
 import logging
 import subprocess
@@ -288,6 +289,43 @@ class MonitorTab(QWidget):
             "resume_delay": self.resume_delay,
             "auto_monitor": False  # Never auto-monitor on startup now
         }
+    #COOKIES YUMMY
+    def save_cookies(self):
+        cookie_store = self.browser.page().profile().cookieStore()
+        cookie_store.allCookies.connect(self.on_cookies_received)
+    
+    def on_cookies_received(self, cookies):
+        cookie_data = []
+        for cookie in cookies:
+            cookie_data.append({
+                "name": cookie.name().data().decode(),
+                "value": cookie.value().data().decode(),
+                "domain": cookie.domain().data().decode(),
+                "path": cookie.path().data().decode(),
+                "expiry": cookie.expirationDate().toString()
+            })
+        
+        # Save cookies to a file
+        with open("cookies.json", "w") as f:
+            json.dump(cookie_data, f, indent=4)
+        self.log("Cookies saved successfully.")
+
+    def load_cookies(self):
+        try:
+            with open("cookies.json", "r") as f:
+                cookie_data = json.load(f)
+                cookie_store = self.browser.page().profile().cookieStore()
+                for cookie in cookie_data:
+                    # Recreate the cookies and set them
+                    web_cookie = QNetworkCookie()
+                    web_cookie.setName(cookie["name"].encode())
+                    web_cookie.setValue(cookie["value"].encode())
+                    web_cookie.setDomain(cookie["domain"].encode())
+                    web_cookie.setPath(cookie["path"].encode())
+                    cookie_store.setCookie(web_cookie)
+                self.log("Cookies loaded successfully.")
+        except FileNotFoundError:
+            self.log("No cookies file found.")
 
 
 class MainApp(QMainWindow):
@@ -300,7 +338,6 @@ class MainApp(QMainWindow):
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_context_menu)
         self.setCentralWidget(self.tabs)
-        self.load_tabs()
 
         self.global_buttons_layout = QHBoxLayout()
         self.global_load_button = QPushButton("Load All Tabs")
@@ -333,6 +370,31 @@ class MainApp(QMainWindow):
         self.global_buttons_widget = QWidget()
         self.global_buttons_widget.setLayout(self.global_buttons_layout)
         self.setMenuWidget(self.global_buttons_widget)
+
+        self.load_tabs()
+        self.load_cookies()  # Load cookies on startup
+    
+    def load_cookies(self):
+        """Method to load cookies."""
+        # Add your code here to load cookies, for example:
+        cookies_file = "cookies.json"
+        if os.path.exists(cookies_file):
+            with open(cookies_file, "r") as file:
+                cookies = json.load(file)
+                # Your code to use the loaded cookies
+                print(f"Cookies loaded: {cookies}")
+        else:
+            print("No cookies file found.")
+    
+    def load_tabs(self):
+        """Load tabs from the config file if it exists."""
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                data = json.load(f)
+                for tab_data in data:
+                    self.add_tab(**tab_data)
+        else:
+            self.add_tab(name="Tab 1")
 
     def toggle_global_monitoring(self):
         """Toggle global monitoring for all tabs."""
@@ -371,7 +433,7 @@ class MainApp(QMainWindow):
             rename_action = menu.addAction("Rename Tab")
             close_action = menu.addAction("Close Tab")
             add_action = menu.addAction("Add Tab")
-            action = menu.exec_(self.tabs.mapToGlobal(position))
+            action = menu.exec(self.tabs.mapToGlobal(position))
 
             if action == rename_action:
                 name, ok = QInputDialog.getText(self, "Rename Tab", "New tab name:")
@@ -385,7 +447,7 @@ class MainApp(QMainWindow):
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
         else:
             add_action = menu.addAction("Add Tab")
-            action = menu.exec_(self.tabs.mapToGlobal(position))
+            action = menu.exec(self.tabs.mapToGlobal(position))
             if action == add_action:
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
 
@@ -418,6 +480,11 @@ class MainApp(QMainWindow):
         """Save tabs' state before closing."""
         self.stop_all_monitoring()
         self.save_tabs()
+         # Save cookies for all tabs
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if isinstance(widget, MonitorTab):
+                widget.save_cookies()
         event.accept()
 
     def save_tabs(self):
