@@ -8,7 +8,7 @@ https://www.python.org/downloads/release/python-3133/
 * ![image](https://github.com/user-attachments/assets/94e12a43-0aa3-4518-a002-068d2bfd49ba)
 
 **PLEASE CHECK ADD python.exe to PATH**
-![image](https://github.com/user-attachments/assets/4f87ce30-2dfb-44da-a3da-34aed0b8c0d8)
+* ![image](https://github.com/user-attachments/assets/4f87ce30-2dfb-44da-a3da-34aed0b8c0d8)
 
 2. Run the script
 * Windows: runForWindows.bat
