@@ -12,18 +12,25 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from plyer import notification
 import logging
+import subprocess
+import winsound
+
+# Constants
+CONFIG_FILE = "tabs_config.json"
+ICON_PATHS = {
+    "green": "green_icon.png",
+    "red": "red_icon.png",
+    "black": "black_icon.png"
+}
 
 # Suppress Wayland warning
 if platform.system() != "Windows":
     os.environ["QT_QPA_PLATFORM"] = "wayland"
+
 logging.basicConfig(level=logging.ERROR)
 
 if platform.system() == "Windows":
     import winsound
-else:
-    import subprocess
-
-CONFIG_FILE = "tabs_config.json"
 
 
 class MonitorTab(QWidget):
@@ -31,38 +38,40 @@ class MonitorTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.tab_name = name
-        self.threshold = threshold or 5
         self.url = url
-        self.monitoring = auto_monitor
-        self.empty_scans = 0
+        self.threshold = threshold or 5
         self.resume_delay = resume_delay or 1
+        self.monitoring = auto_monitor
+        self.paused = False
+        self.empty_scans = 0
         self.is_flashing = False
         self.flash_state = False
-        self.paused = False
 
         self.layout = QVBoxLayout(self)
+        self.setup_ui()
+        self.setup_timers()
 
+    def setup_ui(self):
+        """Setup UI components for this tab."""
         # Top bar
         top_bar = QHBoxLayout()
-        self.url_input = QLineEdit()
-        self.url_input.setText(url)
+        self.url_input = QLineEdit(self.url)
         self.load_button = QPushButton("Load")
         self.monitor_button = QPushButton("Start Monitor")
-        self.load_button.clicked.connect(self.load_url)
-        self.monitor_button.clicked.connect(self.toggle_monitoring)
-
         self.threshold_label = QLabel("Threshold:")
         self.threshold_dropdown = QComboBox()
+        self.delay_label = QLabel("Delay Before Resuming (min):")
+        self.delay_dropdown = QComboBox()
+
         self.threshold_dropdown.addItems([str(i) for i in range(1, 11)])
         self.threshold_dropdown.setCurrentText(str(self.threshold))
         self.threshold_dropdown.currentTextChanged.connect(self.update_threshold)
 
-        self.delay_label = QLabel("Delay Before Resuming (min):")
-        self.delay_dropdown = QComboBox()
         self.delay_dropdown.addItems([str(i) for i in range(1, 21)])
         self.delay_dropdown.setCurrentText(str(self.resume_delay))
         self.delay_dropdown.currentTextChanged.connect(self.update_resume_delay)
 
+        # Add widgets to top_bar
         top_bar.addWidget(self.url_input)
         top_bar.addWidget(self.load_button)
         top_bar.addWidget(self.monitor_button)
@@ -73,32 +82,34 @@ class MonitorTab(QWidget):
 
         self.layout.addLayout(top_bar)
 
+        # Browser setup
         self.browser = QWebEngineView()
         self.layout.addWidget(self.browser)
         self.layout.setStretch(1, 80)
 
-        self.monitor_timer = QTimer()
+        # Buttons connections
+        self.load_button.clicked.connect(self.load_url)
+        self.monitor_button.clicked.connect(self.toggle_monitoring)
+
+    def setup_timers(self):
+        """Setup timers for page monitoring and flashing."""
+        self.monitor_timer = QTimer(self)
         self.monitor_timer.timeout.connect(self.check_page)
-
-        self.reload_timer = QTimer()
+        self.reload_timer = QTimer(self)
         self.reload_timer.timeout.connect(self.reload_page)
-
-        self.flash_timer = QTimer()
+        self.flash_timer = QTimer(self)
         self.flash_timer.timeout.connect(self.flash_tab_icon)
 
-        self.icon_paths = {
-            "green": "green_icon.png",
-            "red": "red_icon.png",
-            "black": "black_icon.png"
-        }
-
+        self.reload_timer.start(120000)  # Reload every 2 minutes
         self.set_icon("red")
-        self.reload_timer.start(120000)  # Force reload interval
+        self.monitor_timer.setSingleShot(False)
 
     def log(self, message):
+        """Log messages to the console with timestamp."""
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{self.tab_name}] {message}")
 
     def load_url(self):
+        """Load the URL in the browser."""
         self.url = self.url_input.text().strip()
         if not self.url.startswith("http"):
             self.url = "https://" + self.url
@@ -106,13 +117,16 @@ class MonitorTab(QWidget):
         self.log(f"Page loaded: {self.url}")
 
     def reload_page(self):
+        """Reload the web page."""
         self.browser.reload()
         self.log("Forced page reload.")
 
     def check_page(self):
+        """Check page content for specific keyword."""
         self.browser.page().toPlainText(self.process_text)
 
     def process_text(self, text):
+        """Process the page text for 'ACCEPTED' occurrences."""
         count = text.count("ACCEPTED") - 1
         self.log(f"'OPEN ORDERS' found: {count}")
         if count >= self.threshold:
@@ -122,12 +136,13 @@ class MonitorTab(QWidget):
             self.empty_scans += 1
             if self.empty_scans >= 10:
                 self.log("No 'ACCEPTED' in 10 scans. Pausing 3 minutes.")
-                self.pause_monitoring(180)  # Interval for fail-scan
+                self.pause_monitoring(180)
                 self.empty_scans = 0
         else:
             self.empty_scans = 0
 
     def notify(self, count):
+        """Send system notification with the count."""
         self.play_sound()
         total_minutes = (count + 1) * 18
         hours, minutes = divmod(total_minutes, 60)
@@ -140,19 +155,22 @@ class MonitorTab(QWidget):
         self.log(f"Notification triggered at {count} matches.")
 
     def play_sound(self):
+        """Play a sound on notification."""
         if platform.system() == "Windows":
             winsound.MessageBeep()
         else:
             subprocess.Popen(["paplay", "/usr/share/sounds/freedesktop/stereo/complete.oga"])
 
     def toggle_monitoring(self):
+        """Toggle monitoring state."""
         if not self.monitoring:
             self.start_monitoring()
         else:
             self.stop_monitoring()
 
     def start_monitoring(self):
-        self.monitor_timer.start(5000)  # Scan interval
+        """Start monitoring the page."""
+        self.monitor_timer.start(5000)  # Scan every 5 seconds
         self.monitoring = True
         self.paused = False
         self.monitor_button.setText("Stop Monitor")
@@ -160,6 +178,7 @@ class MonitorTab(QWidget):
         self.log("Monitoring started.")
 
     def stop_monitoring(self):
+        """Stop monitoring the page."""
         self.monitor_timer.stop()
         self.monitoring = False
         self.paused = False
@@ -169,6 +188,7 @@ class MonitorTab(QWidget):
         self.log("Monitoring stopped.")
 
     def pause_monitoring(self, seconds):
+        """Pause the monitoring for a specific duration."""
         self.stop_flashing()
         self.set_icon("black")
         self.monitor_timer.stop()
@@ -177,6 +197,7 @@ class MonitorTab(QWidget):
         self.log(f"Paused for {seconds // 60} min.")
 
     def resume_monitoring(self):
+        """Resume the monitoring after a pause."""
         self.paused = False
         self.monitor_timer.start(5000)
         self.start_flashing("green")
@@ -184,28 +205,33 @@ class MonitorTab(QWidget):
         notification.notify(
             title=f"[{self.tab_name}] Monitoring Resumed",
             message=f"PLEASE CHECK [{self.tab_name}]",
-            timeout=15  # Pause notification duration
+            timeout=15
         )
 
     def update_threshold(self, value):
+        """Update the threshold for 'ACCEPTED' occurrences."""
         self.threshold = int(value)
         self.log(f"Threshold updated to {self.threshold}")
 
     def update_resume_delay(self, value):
+        """Update the resume delay."""
         self.resume_delay = int(value)
         self.log(f"Resume delay updated to {self.resume_delay} minutes.")
 
     def start_flashing(self, color="green"):
+        """Start flashing the tab icon with a color."""
         self.flashing_color = color
         self.is_flashing = True
         self.flash_state = False
         self.flash_timer.start(500)
 
     def stop_flashing(self):
+        """Stop flashing the tab icon."""
         self.is_flashing = False
         self.flash_timer.stop()
 
     def flash_tab_icon(self):
+        """Flash the tab icon between the color states."""
         if not self.is_flashing:
             return
         color = "red" if self.flash_state else self.flashing_color
@@ -213,12 +239,14 @@ class MonitorTab(QWidget):
         self.flash_state = not self.flash_state
 
     def set_icon(self, color):
+        """Set the tab icon based on the current state."""
         index = self.parent.tabs.indexOf(self)
-        icon = QIcon(self.icon_paths.get(color, "green_icon.png"))
+        icon = QIcon(ICON_PATHS.get(color, "green_icon.png"))
         self.parent.tabs.setTabIcon(index, icon)
         self.parent.tabs.setTabText(index, self.tab_name)
 
     def get_state(self):
+        """Get the state of the tab."""
         return {
             "name": self.tab_name,
             "url": self.url_input.text(),
@@ -233,14 +261,13 @@ class MainApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Web Monitor")
         self.setGeometry(100, 100, 1200, 800)
-        self.tabs = QTabWidget()
+        self.tabs = QTabWidget(self)
         self.tabs.setMovable(True)
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_context_menu)
         self.setCentralWidget(self.tabs)
         self.load_tabs()
 
-        # Global controls
         self.global_buttons_layout = QHBoxLayout()
         self.global_load_button = QPushButton("Load All Tabs")
         self.global_monitor_button = QPushButton("Start Monitor All")
@@ -274,6 +301,7 @@ class MainApp(QMainWindow):
         self.setMenuWidget(self.global_buttons_widget)
 
     def toggle_global_monitoring(self):
+        """Toggle global monitoring for all tabs."""
         if self.global_monitor_button.text().startswith("Start"):
             self.start_all_monitoring()
             self.global_monitor_button.setText("Stop Monitor All")
@@ -282,22 +310,26 @@ class MainApp(QMainWindow):
             self.global_monitor_button.setText("Start Monitor All")
 
     def set_all_thresholds(self, value):
+        """Set the threshold for all tabs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             widget.threshold_dropdown.setCurrentText(value)
 
     def set_all_delays(self, value):
+        """Set the delay for all tabs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             widget.delay_dropdown.setCurrentText(value)
 
     def add_tab(self, name="Tab", url="", threshold=5, resume_delay=1, auto_monitor=False):
+        """Add a new tab to the application."""
         tab = MonitorTab(self, name, url, threshold, resume_delay, auto_monitor)
         index = self.tabs.addTab(tab, tab.tab_name)
         tab.set_icon("green" if auto_monitor else "red")
         self.tabs.setCurrentIndex(index)
 
     def show_context_menu(self, position):
+        """Show context menu for managing tabs."""
         index = self.tabs.tabBar().tabAt(position)
         menu = QMenu()
 
@@ -324,41 +356,45 @@ class MainApp(QMainWindow):
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
 
     def load_all_tabs(self):
+        """Load all tabs' URLs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             if widget.url.strip():
                 widget.load_url()
 
     def start_all_monitoring(self):
+        """Start monitoring on all tabs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             widget.start_monitoring()
 
     def stop_all_monitoring(self):
+        """Stop monitoring on all tabs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             widget.stop_monitoring()
 
     def reload_all_tabs(self):
+        """Reload all tabs."""
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             widget.reload_page()
 
     def closeEvent(self, event):
+        """Save tabs' state before closing."""
         self.stop_all_monitoring()
         self.save_tabs()
         event.accept()
 
     def save_tabs(self):
-        data = []
-        for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            data.append(widget.get_state())
+        """Save the current state of all tabs to a config file."""
+        data = [widget.get_state() for widget in (self.tabs.widget(i) for i in range(self.tabs.count()))]
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f, indent=2)
         print("[CONFIG] Tabs saved.")
 
     def load_tabs(self):
+        """Load tabs from the config file if it exists."""
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r") as f:
                 data = json.load(f)
