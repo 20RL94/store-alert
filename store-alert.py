@@ -50,9 +50,32 @@ class MonitorTab(QWidget):
         self.layout = QVBoxLayout(self)
         self.setup_ui()
         self.setup_timers()
+         # Detect URL change in the input field
+        self.url_input.textChanged.connect(self.on_url_changed)
 
+        # Listen to changes in the web view's URL
+        self.browser.urlChanged.connect(self.on_browser_url_changed)
+    
+    def on_url_changed(self):
+        """Detect URL change in the input field and update the browser QUrl."""
+        new_url = self.url_input.text().strip()
+        if new_url and new_url != self.url:
+            if not new_url.startswith("http"):
+                new_url = "https://" + new_url
+            self.url = new_url
+            self.browser.load(QUrl(new_url))  # Load the new URL in the browser
+            self.log(f"URL updated to: {new_url}")
+
+    def on_browser_url_changed(self, qurl):
+        """Detect URL change in the browser and update the URL input field."""
+        new_url = qurl.toString()
+        if new_url != self.url_input.text():
+            self.url_input.setText(new_url)  # Update the URL text in the input field
+            self.url = new_url
+            self.log(f"URL in browser updated to: {new_url}")
+            
     def setup_ui(self):
-        """Setup UI components for this tab."""
+        #Setup UI components for this tab.
         # Top bar
         top_bar = QHBoxLayout()
         self.url_input = QLineEdit(self.url)
@@ -244,6 +267,7 @@ class MonitorTab(QWidget):
         icon = QIcon(ICON_PATHS.get(color, "green_icon.png"))
         self.parent.tabs.setTabIcon(index, icon)
         self.parent.tabs.setTabText(index, self.tab_name)
+    
 
     def get_state(self):
         """Get the state of the tab."""
