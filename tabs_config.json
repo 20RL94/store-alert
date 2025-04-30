@@ -1,0 +1,128 @@
+[
+  {
+    "name": "WAG-G",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=ljk8&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 2,
+    "resume_delay": 1,
+    "auto_monitor": false
+  },
+  {
+    "name": "SCH-G",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=dle7&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "ADS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=gsix&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "BRS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=yx3a&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "FBS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=nkdp&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]&webhook-details-modal=6810f145cceb2ed0294ed1e0",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "FLS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=o0qd&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]&webhook-details-modal=6810f145cceb2ed0294ed1e0",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "FZG",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=fsmk&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]&webhook-details-modal=6810f145cceb2ed0294ed1e0",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "GSD",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=giwl&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]&webhook-details-modal=6810f145cceb2ed0294ed1e0",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "KRS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=tcid&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "LHS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=i941&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "LZS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=gy6a&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "QLP",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=dmww&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "RHS",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745791200000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=gkb4&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "WTG",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=znt2&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "LDG-L",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=ypwr&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "AHS-I",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=bqr6&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "DRG-I",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=c89a&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  },
+  {
+    "name": "RNS-S",
+    "url": "https://portal.foodora.com/pv2/at/p/shops-integrations/418e7907-21c1-4f67-9fe7-e462136cb566/manage?updates_list_assortmentStatus[]&updates_list_catalogStatuses[]&updates_list_dateRange[]=1745877600000,1745964000000&updates_list_externalCaseId&updates_list_jobStatus[]&updates_list_orderId&updates_list_orderStatus[]=ACCEPTED&updates_list_outlets[]=ljk8&updates_list_pageNumber=1&updates_list_promoStatuses[]&updates_list_salesforceCaseId&updates_list_searchText&updates_list_selectedSubTab=1&updates_list_selectedTab=1&updates_list_subview=orders&updates_list_webhookId&updates_list_webhookStatus[]",
+    "threshold": 5,
+    "resume_delay": 15,
+    "auto_monitor": false
+  }
+]

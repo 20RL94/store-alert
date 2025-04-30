@@ -1,21 +1,22 @@
+# Full updated code with global threshold and delay dropdowns in the top-right control pane.
+
 import sys
 import json
 import os
 import platform
 from datetime import datetime
-from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import (
+from PyQt5.QtCore import QUrl, QTimer, Qt
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout,
     QLineEdit, QPushButton, QHBoxLayout, QInputDialog, QMenu, QComboBox, QLabel
 )
-from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 from plyer import notification
 import logging
 
 # Suppress Wayland warning
-if platform.system() != "Windows":
-    os.environ["QT_QPA_PLATFORM"] = "wayland"
+os.environ["QT_QPA_PLATFORM"] = "wayland"
 logging.basicConfig(level=logging.ERROR)
 
 if platform.system() == "Windows":
@@ -93,7 +94,7 @@ class MonitorTab(QWidget):
         }
 
         self.set_icon("red")
-        self.reload_timer.start(120000)  # Force reload interval
+        self.reload_timer.start(120000) #force reload interval
 
     def log(self, message):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{self.tab_name}] {message}")
@@ -106,8 +107,14 @@ class MonitorTab(QWidget):
         self.log(f"Page loaded: {self.url}")
 
     def reload_page(self):
+        self.browser.page().urlChanged.connect(self.update_current_url)
         self.browser.reload()
         self.log("Forced page reload.")
+
+    def update_current_url(self, qurl):
+        self.url = qurl.toString()
+        self.url_input.setText(self.url)
+        self.log(f"Updated URL to: {self.url}")
 
     def check_page(self):
         self.browser.page().toPlainText(self.process_text)
@@ -122,19 +129,19 @@ class MonitorTab(QWidget):
             self.empty_scans += 1
             if self.empty_scans >= 10:
                 self.log("No 'ACCEPTED' in 10 scans. Pausing 3 minutes.")
-                self.pause_monitoring(180)  # Interval for fail-scan
+                self.pause_monitoring(180) # interval for fail-scan
                 self.empty_scans = 0
         else:
             self.empty_scans = 0
 
     def notify(self, count):
         self.play_sound()
-        total_minutes = (count + 1) * 18
+        total_minutes = (count+1) * 18
         hours, minutes = divmod(total_minutes, 60)
         formatted_duration = f"{hours:02}:{minutes:02}"
         notification.notify(
             title=f"[{self.tab_name}] OPEN ORDERS",
-            message=f"COUNT: ({count} Orders).\nSuggested Offline-Duration: {formatted_duration}",
+            message = f"COUNT: ({count} Orders).\nSuggested Offline-Duration: {formatted_duration}",
             timeout=20
         )
         self.log(f"Notification triggered at {count} matches.")
@@ -152,7 +159,7 @@ class MonitorTab(QWidget):
             self.stop_monitoring()
 
     def start_monitoring(self):
-        self.monitor_timer.start(5000)  # Scan interval
+        self.monitor_timer.start(5000) #scan interval
         self.monitoring = True
         self.paused = False
         self.monitor_button.setText("Stop Monitor")
@@ -184,7 +191,7 @@ class MonitorTab(QWidget):
         notification.notify(
             title=f"[{self.tab_name}] Monitoring Resumed",
             message=f"PLEASE CHECK [{self.tab_name}]",
-            timeout=15  # Pause notification duration
+            timeout=10 #pause notification duration
         )
 
     def update_threshold(self, value):
@@ -235,7 +242,7 @@ class MainApp(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         self.tabs = QTabWidget()
         self.tabs.setMovable(True)
-        self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_context_menu)
         self.setCentralWidget(self.tabs)
         self.load_tabs()
@@ -251,7 +258,7 @@ class MainApp(QMainWindow):
 
         self.global_threshold_label = QLabel("Global Threshold:")
         self.global_threshold_dropdown = QComboBox()
-        self.global_threshold_dropdown.addItems([str(i) for i in range(1, 11)])
+        self.global_threshold_dropdown.addItems([str(i) for i in range(1,11)])
         self.global_threshold_dropdown.setCurrentText("5")
         self.global_threshold_dropdown.currentTextChanged.connect(self.set_all_thresholds)
 
@@ -372,4 +379,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainApp()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
