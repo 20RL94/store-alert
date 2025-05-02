@@ -252,47 +252,16 @@ class MainApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Web Monitor")
         self.setGeometry(100, 100, 1200, 800)
-        self.tabs = QTabWidget(self)
+
+        self.tabs = QTabWidget()
         self.tabs.setMovable(True)
         self.tabs.setStyleSheet("QTabBar::tab { max-width: 80px; }")
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_context_menu)
         self.setCentralWidget(self.tabs)
 
-        self.persistent_profile = self.create_persistent_profile()  # <-- Important
-
-        self.global_buttons_layout = QHBoxLayout()
-        self.global_load_button = QPushButton("Load All Tabs")
-        self.global_monitor_button = QPushButton("Start Monitor All")
-        self.global_reload_button = QPushButton("Reload All Tabs")
-        self.global_load_button.clicked.connect(self.load_all_tabs)
-        self.global_monitor_button.clicked.connect(self.toggle_global_monitoring)
-        self.global_reload_button.clicked.connect(self.reload_all_tabs)
-
-        self.global_threshold_label = QLabel("Global Threshold:")
-        self.global_threshold_dropdown = QComboBox()
-        self.global_threshold_dropdown.addItems([str(i) for i in range(1, 11)])
-        self.global_threshold_dropdown.setCurrentText("5")
-        self.global_threshold_dropdown.currentTextChanged.connect(self.set_all_thresholds)
-
-        self.global_delay_label = QLabel("Global Delay (min):")
-        self.global_delay_dropdown = QComboBox()
-        self.global_delay_dropdown.addItems([str(i) for i in range(1, 21)])
-        self.global_delay_dropdown.setCurrentText("1")
-        self.global_delay_dropdown.currentTextChanged.connect(self.set_all_delays)
-
-        self.global_buttons_layout.addWidget(self.global_load_button)
-        self.global_buttons_layout.addWidget(self.global_monitor_button)
-        self.global_buttons_layout.addWidget(self.global_reload_button)
-        self.global_buttons_layout.addWidget(self.global_threshold_label)
-        self.global_buttons_layout.addWidget(self.global_threshold_dropdown)
-        self.global_buttons_layout.addWidget(self.global_delay_label)
-        self.global_buttons_layout.addWidget(self.global_delay_dropdown)
-
-        self.global_buttons_widget = QWidget()
-        self.global_buttons_widget.setLayout(self.global_buttons_layout)
-        self.setMenuWidget(self.global_buttons_widget)
-
+        self.persistent_profile = self.create_persistent_profile()
+        self.setup_global_controls()
         self.load_tabs()
 
     def create_persistent_profile(self):
@@ -305,48 +274,78 @@ class MainApp(QMainWindow):
     def create_browser_page(self):
         return QWebEnginePage(self.persistent_profile, self)
 
+    def setup_global_controls(self):
+        layout = QHBoxLayout()
+        self.global_load_button = QPushButton("Load All Tabs")
+        self.global_monitor_button = QPushButton("Start Monitor All")
+        self.global_reload_button = QPushButton("Reload All Tabs")
+
+        self.global_threshold_dropdown = QComboBox()
+        self.global_threshold_dropdown.addItems([str(i) for i in range(1, 11)])
+        self.global_threshold_dropdown.setCurrentText("5")
+
+        self.global_delay_dropdown = QComboBox()
+        self.global_delay_dropdown.addItems([str(i) for i in range(1, 21)])
+        self.global_delay_dropdown.setCurrentText("1")
+
+        layout.addWidget(self.global_load_button)
+        layout.addWidget(self.global_monitor_button)
+        layout.addWidget(self.global_reload_button)
+        layout.addWidget(QLabel("Global Threshold:"))
+        layout.addWidget(self.global_threshold_dropdown)
+        layout.addWidget(QLabel("Global Delay (min):"))
+        layout.addWidget(self.global_delay_dropdown)
+
+        self.global_buttons_widget = QWidget()
+        self.global_buttons_widget.setLayout(layout)
+        self.setMenuWidget(self.global_buttons_widget)
+
+        self.global_load_button.clicked.connect(self.load_all_tabs)
+        self.global_monitor_button.clicked.connect(self.toggle_global_monitoring)
+        self.global_reload_button.clicked.connect(self.reload_all_tabs)
+        self.global_threshold_dropdown.currentTextChanged.connect(self.set_all_thresholds)
+        self.global_delay_dropdown.currentTextChanged.connect(self.set_all_delays)
+
     def toggle_global_monitoring(self):
-        if self.global_monitor_button.text().startswith("Start"):
-            self.start_all_monitoring()
-            self.global_monitor_button.setText("Stop Monitor All")
-        else:
-            self.stop_all_monitoring()
-            self.global_monitor_button.setText("Start Monitor All")
+        start = self.global_monitor_button.text().startswith("Start")
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if start:
+                tab.start_monitoring()
+            else:
+                tab.stop_monitoring()
+        self.global_monitor_button.setText("Stop Monitor All" if start else "Start Monitor All")
 
     def set_all_thresholds(self, value):
         for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            widget.threshold_dropdown.setCurrentText(value)
+            self.tabs.widget(i).threshold_dropdown.setCurrentText(value)
 
     def set_all_delays(self, value):
         for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            widget.delay_dropdown.setCurrentText(value)
-
-    
+            self.tabs.widget(i).delay_dropdown.setCurrentText(value)
 
     def show_context_menu(self, position):
         index = self.tabs.tabBar().tabAt(position)
         menu = QMenu()
+
         if index != -1:
             rename_action = menu.addAction("Rename Tab")
             close_action = menu.addAction("Close Tab")
             add_action = menu.addAction("Add Tab")
             action = menu.exec(self.tabs.mapToGlobal(position))
+
             if action == rename_action:
                 name, ok = QInputDialog.getText(self, "Rename Tab", "New tab name:")
                 if ok and name:
                     self.tabs.setTabText(index, name)
-                    widget = self.tabs.widget(index)
-                    widget.tab_name = name
+                    self.tabs.widget(index).tab_name = name
             elif action == close_action:
                 self.tabs.removeTab(index)
             elif action == add_action:
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
         else:
             add_action = menu.addAction("Add Tab")
-            action = menu.exec(self.tabs.mapToGlobal(position))
-            if action == add_action:
+            if menu.exec(self.tabs.mapToGlobal(position)) == add_action:
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
 
     def load_all_tabs(self):
@@ -355,30 +354,19 @@ class MainApp(QMainWindow):
             if widget.url.strip():
                 widget.load_url()
 
-    def start_all_monitoring(self):
-        for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            widget.start_monitoring()
-
-    def stop_all_monitoring(self):
-        for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            widget.stop_monitoring()
-
     def reload_all_tabs(self):
         for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            widget.reload_page()
+            self.tabs.widget(i).reload_page()
 
     def save_tabs(self):
-        data = [widget.get_state() for widget in (self.tabs.widget(i) for i in range(self.tabs.count()))]
+        data = [self.tabs.widget(i).get_state() for i in range(self.tabs.count())]
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f, indent=2)
         print("[CONFIG] Tabs saved.")
 
-
     def closeEvent(self, event):
-        self.stop_all_monitoring()
+        for i in range(self.tabs.count()):
+            self.tabs.widget(i).stop_monitoring()
         self.save_tabs()
         event.accept()
 
@@ -391,64 +379,41 @@ class MainApp(QMainWindow):
         self.tabs.setCurrentIndex(index)
         return tab
 
-
-    def _inject_date_range(self, raw_url: str) -> tuple[str, bool]:
-        from datetime import datetime, timedelta
-        import re
-
+    def _inject_date_range(self, raw_url):
         if not raw_url.startswith("http"):
             raw_url = "https://" + raw_url
 
-        # Timestamps for yesterday and today at 12:00 PM
         noon_today = datetime.combine(datetime.now().date(), datetime.strptime("12:00:00PM", "%I:%M:%S%p").time())
         noon_yesterday = noon_today - timedelta(days=1)
 
         ts_start = int(noon_yesterday.timestamp() * 1000)
         ts_end = int(noon_today.timestamp() * 1000)
 
-        #print(f"[DateRange Injection] Start: {noon_yesterday.strftime('%d.%m.%Y %H:%M')} ({ts_start})")
-        #print(f"[DateRange Injection] End:   {noon_today.strftime('%d.%m.%Y %H:%M')} ({ts_end})")
-
-        # Cleanup: remove all duplicate dateRange params
         url_cleaned = re.sub(r"(updates_list_dateRange\[\]=)[^&]*", "", raw_url)
-
-        # Cleanup: remove lonely numbers (very likely garbage)
         url_cleaned = re.sub(r"[&?]?\d{13}(?:,\d{13})?", "", url_cleaned)
+        url_cleaned = re.sub(r"[&?]+(?=&)|[&?]+$", "", url_cleaned)
 
-        # Remove double && or &? if needed
-        url_cleaned = re.sub(r"[&?]+(?=&)", "", url_cleaned)
-        url_cleaned = re.sub(r"[&?]+$", "", url_cleaned)
-
-        # Add fresh param
         sep = "&" if "?" in url_cleaned else "?"
         updated_url = f"{url_cleaned}{sep}updates_list_dateRange[]={ts_start},{ts_end}"
-
-        # Final cleanup (no trailing ampersand mess)
         updated_url = re.sub(r"[&]+", "&", updated_url)
 
         return updated_url, updated_url != raw_url
 
-
-
     def load_tabs(self):
-        modified = False  # <-- Initialize the flag
+        modified = False
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r") as f:
                 data = json.load(f)
             for tab_data in data:
-                # inject the date‐range right here
                 injected_url, was_modified = self._inject_date_range(tab_data.get("url", ""))
                 tab_data["url"] = injected_url
                 if was_modified:
                     modified = True
                 tab = self.add_tab(**tab_data)
                 tab.load_url()
-            
-            # Save back only if any URL was modified
             if modified:
                 self.save_tabs()
         else:
-            # first runs still get a tab
             self.add_tab(name="Tab 1")
 
 
