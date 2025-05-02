@@ -38,6 +38,7 @@ if platform.system() == "Windows":
 class MonitorTab(QWidget):
     def __init__(self, parent=None, name="Tab", url="", threshold=None, resume_delay=None, auto_monitor=False):
         super().__init__(parent)
+        self.page_ready = False
         self.parent = parent
         self.tab_name = name
         self.url = url
@@ -50,12 +51,14 @@ class MonitorTab(QWidget):
         self.flash_state = False
 
         self.layout = QVBoxLayout(self)
+
+        # moved into setup_ui to avoid early access
+
         self.setup_ui()
+        self.url_input.textChanged.connect(self.on_url_changed)
         self.setup_timers()
 
-        self.url_input.textChanged.connect(self.on_url_changed)
         self.browser.urlChanged.connect(self.on_browser_url_changed)
-    
 
     def setup_ui(self):
         top_bar = QHBoxLayout()
@@ -85,10 +88,10 @@ class MonitorTab(QWidget):
 
         self.layout.addLayout(top_bar)
 
-        # Use persistent profile for the browser
         self.browser = QWebEngineView()
         self.browser.setPage(self.parent.create_browser_page())
         self.layout.addWidget(self.browser)
+        self.browser.loadFinished.connect(self.on_load_finished)
         self.layout.setStretch(1, 80)
 
         self.load_button.clicked.connect(self.load_url)
@@ -102,7 +105,7 @@ class MonitorTab(QWidget):
         self.flash_timer = QTimer(self)
         self.flash_timer.timeout.connect(self.flash_tab_icon)
 
-        self.reload_timer.start(120000)
+        self.reload_timer.start(180000)
         self.set_icon("red")
         self.monitor_timer.setSingleShot(False)
 
@@ -110,17 +113,31 @@ class MonitorTab(QWidget):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{self.tab_name}] {message}")
 
     def load_url(self):
-        self.url = self.url_input.text().strip()
-        if not self.url.startswith("http"):
-            self.url = "https://" + self.url
+        raw_url = self.url_input.text().strip()
+        if not raw_url.startswith("http"):
+            raw_url = "https://" + raw_url
+        self.url = raw_url
+        self.url_input.setText(raw_url)
+        self.page_ready = False  # Reset flag
         self.browser.load(QUrl(self.url))
-        self.log(f"Page loaded: {self.url}")
+        #self.log(f"Page loaded: {self.url}")
 
     def reload_page(self):
-        self.browser.reload()
-        self.log("Forced page reload.")
+        self.page_ready = False
+        if self.monitoring:
+            self.monitor_timer.stop()  # pause scanning
+
+        injected_url, _ = self.parent._inject_date_range(self.url)
+        self.url = injected_url
+        self.url_input.setText(self.url)
+        self.browser.load(QUrl(self.url))
+        self.log("Forced page reload with fresh date range.")
+
 
     def check_page(self):
+        if not self.page_ready:
+            self.log("Page not ready, skipping scan.")
+            return
         self.browser.page().toPlainText(self.process_text)
 
     def process_text(self, text):
@@ -169,7 +186,7 @@ class MonitorTab(QWidget):
             self.stop_monitoring()
 
     def start_monitoring(self):
-        self.monitor_timer.start(5000)
+        self.monitor_timer.start(15000) #scan interval
         self.monitoring = True
         self.paused = False
         self.monitor_button.setText("Stop Monitor")
@@ -195,14 +212,9 @@ class MonitorTab(QWidget):
 
     def resume_monitoring(self):
         self.paused = False
-        self.monitor_timer.start(5000)
+        self.monitor_timer.start(15000)
         self.start_flashing("green")
         self.log("Monitoring resumed.")
-        notification.notify(
-            title=f"[{self.tab_name}] Monitoring Resumed",
-            message=f"PLEASE CHECK [{self.tab_name}]",
-            timeout=15
-        )
 
     def update_threshold(self, value):
         self.threshold = int(value)
@@ -243,12 +255,22 @@ class MonitorTab(QWidget):
             "resume_delay": self.resume_delay,
             "auto_monitor": False
         }
+
     def on_url_changed(self):
         self.url = self.url_input.text().strip()
-    
+
     def on_browser_url_changed(self, qurl):
-        # Sync the URL in the QLineEdit with the browser's URL
         self.url_input.setText(qurl.toString())
+    
+    def on_load_finished(self, success):
+        self.page_ready = success
+        if success:
+            self.log("Page finished loading.")
+            if self.monitoring and not self.monitor_timer.isActive() and not self.paused:
+                self.monitor_timer.start(15000)  # resume scanning after reload
+                self.log("Monitoring resumed after page load.")
+        else:
+            self.log("Page failed to load.")
 
 
 
@@ -260,6 +282,7 @@ class MainApp(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         self.tabs = QTabWidget(self)
         self.tabs.setMovable(True)
+        self.tabs.setStyleSheet("QTabBar::tab { max-width: 80px; }")
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_context_menu)
         self.setCentralWidget(self.tabs)
@@ -328,11 +351,7 @@ class MainApp(QMainWindow):
             widget = self.tabs.widget(i)
             widget.delay_dropdown.setCurrentText(value)
 
-    def add_tab(self, name="Tab", url="", threshold=5, resume_delay=1, auto_monitor=False):
-        tab = MonitorTab(self, name, url, threshold, resume_delay, auto_monitor)
-        index = self.tabs.addTab(tab, tab.tab_name)
-        tab.set_icon("green" if auto_monitor else "red")
-        self.tabs.setCurrentIndex(index)
+    
 
     def show_context_menu(self, position):
         index = self.tabs.tabBar().tabAt(position)
@@ -385,19 +404,80 @@ class MainApp(QMainWindow):
             json.dump(data, f, indent=2)
         print("[CONFIG] Tabs saved.")
 
-    def load_tabs(self):
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                data = json.load(f)
-                for tab_data in data:
-                    self.add_tab(**tab_data)
-        else:
-            self.add_tab(name="Tab 1")
 
     def closeEvent(self, event):
         self.stop_all_monitoring()
         self.save_tabs()
         event.accept()
+
+    def add_tab(self, name="Tab", url="", threshold=5, resume_delay=1, auto_monitor=False):
+        if url:
+            url, _ = self._inject_date_range(url)
+        tab = MonitorTab(self, name, url, threshold, resume_delay, auto_monitor)
+        index = self.tabs.addTab(tab, tab.tab_name)
+        tab.set_icon("green" if auto_monitor else "red")
+        self.tabs.setCurrentIndex(index)
+        return tab
+
+
+    def _inject_date_range(self, raw_url: str) -> tuple[str, bool]:
+        from datetime import datetime, timedelta
+        import re
+
+        if not raw_url.startswith("http"):
+            raw_url = "https://" + raw_url
+
+        # Timestamps for yesterday and today at 12:00 PM
+        noon_today = datetime.combine(datetime.now().date(), datetime.strptime("12:00:00PM", "%I:%M:%S%p").time())
+        noon_yesterday = noon_today - timedelta(days=1)
+
+        ts_start = int(noon_yesterday.timestamp() * 1000)
+        ts_end = int(noon_today.timestamp() * 1000)
+
+        #print(f"[DateRange Injection] Start: {noon_yesterday.strftime('%d.%m.%Y %H:%M')} ({ts_start})")
+        #print(f"[DateRange Injection] End:   {noon_today.strftime('%d.%m.%Y %H:%M')} ({ts_end})")
+
+        # Cleanup: remove all duplicate dateRange params
+        url_cleaned = re.sub(r"(updates_list_dateRange\[\]=)[^&]*", "", raw_url)
+
+        # Cleanup: remove lonely numbers (very likely garbage)
+        url_cleaned = re.sub(r"[&?]?\d{13}(?:,\d{13})?", "", url_cleaned)
+
+        # Remove double && or &? if needed
+        url_cleaned = re.sub(r"[&?]+(?=&)", "", url_cleaned)
+        url_cleaned = re.sub(r"[&?]+$", "", url_cleaned)
+
+        # Add fresh param
+        sep = "&" if "?" in url_cleaned else "?"
+        updated_url = f"{url_cleaned}{sep}updates_list_dateRange[]={ts_start},{ts_end}"
+
+        # Final cleanup (no trailing ampersand mess)
+        updated_url = re.sub(r"[&]+", "&", updated_url)
+
+        return updated_url, updated_url != raw_url
+
+
+
+    def load_tabs(self):
+        modified = False  # <-- Initialize the flag
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                data = json.load(f)
+            for tab_data in data:
+                # inject the date‐range right here
+                injected_url, was_modified = self._inject_date_range(tab_data.get("url", ""))
+                tab_data["url"] = injected_url
+                if was_modified:
+                    modified = True
+                tab = self.add_tab(**tab_data)
+                tab.load_url()
+            
+            # Save back only if any URL was modified
+            if modified:
+                self.save_tabs()
+        else:
+            # first runs still get a tab
+            self.add_tab(name="Tab 1")
 
 
 if __name__ == "__main__":

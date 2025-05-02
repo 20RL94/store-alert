@@ -3,8 +3,7 @@ echo === Upgrading pip ===
 python -m pip install --upgrade pip
 
 echo === Installing required packages ===
-pip install PyQt6 PyQt6-WebEngine plyer
-
+pip install requests plyer pygame PyQt5 PyQtWebEngine
 echo === Running store-alert.py ===
 python store-alert.py
 
