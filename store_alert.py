@@ -5,6 +5,7 @@ import json
 import re
 import platform
 import webbrowser
+import traceback
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QIcon
@@ -25,6 +26,12 @@ RELOAD_INTERVAL = 180000
 
 if platform.system() != "Windows":
     os.environ["QT_QPA_PLATFORM"] = "wayland"
+
+# Setup error logging
+LOG_FILE = "monitor.log"
+sys.excepthook = lambda exctype, value, tb: open(LOG_FILE, "a").write(
+    f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}] Uncaught Exception:\n" +
+    "".join(traceback.format_exception(exctype, value, tb)) + "\n")
 
 class MonitorTab(QWidget):
     def __init__(self, parent, name="Tab", url="", threshold=5, resume_delay=1):
@@ -105,14 +112,17 @@ class MonitorTab(QWidget):
             self.browser.page().toPlainText(self.process_text)
 
     def process_text(self, text):
-        count = max(0, text.count("ACCEPTED") - 1)
+        raw_count = text.count("ACCEPTED")
+        count = max(0, raw_count - 1)
+        #print(f"[{self.tab_name}] COUNT: c:{count} r:{raw_count}")
         if count >= self.threshold:
             self.alert_user(count)
             self.pause_monitoring(self.resume_delay * 60)
             self.empty_scan_count = 0
-        elif count == 0:
+        elif count == 0 and self.monitoring and not self.paused:
             self.empty_scan_count += 1
-            if self.empty_scan_count >= 10:
+            #print(f"[{self.tab_name}] FAILCOUNT: {self.empty_scan_count}")
+            if self.empty_scan_count >= 5:
                 index = self.parent.tabs.indexOf(self)
                 self.parent.tabs.tabBar().setTabTextColor(index, Qt.GlobalColor.yellow)
                 self.parent.tabs.tabBar().setStyleSheet("QTabBar::tab:selected { background-color: goldenrod; color: white; }")
@@ -132,19 +142,22 @@ class MonitorTab(QWidget):
                 base_path = os.path.abspath(".")
 
             sound_path = os.path.join(base_path, "alert.mp3")
-            if not os.path.exists(sound_path):
-                return
-
-            pygame.mixer.init()
-            pygame.mixer.music.load(sound_path)
-            pygame.mixer.music.play()
+            if os.path.exists(sound_path):
+                pygame.mixer.init()
+                pygame.mixer.music.load(sound_path)
+                pygame.mixer.music.play()
         except:
             pass
+
         total_minutes = count * 10
         h, m = divmod(total_minutes, 60)
-        notification.notify(
-            title=f"[{self.tab_name}] OPEN ORDERS",
-            message=f"COUNT: {count}\nOffline: {h:02}:{m:02}", timeout=15)
+
+        try:
+            notification.notify(
+                title=f"[{self.tab_name}] OPEN ORDERS",
+                message=f"COUNT: {count}\nOffline: {h:02}:{m:02}", timeout=15)
+        except:
+            pass
 
     def toggle_monitoring(self):
         index = self.parent.tabs.indexOf(self)
@@ -169,7 +182,11 @@ class MonitorTab(QWidget):
 
     def resume_monitoring(self):
         self.paused = False
-        self.monitor_timer.start(SCAN_INTERVAL)
+        if self.monitoring:
+            self.monitor_timer.start(SCAN_INTERVAL)
+            index = self.parent.tabs.indexOf(self)
+            self.parent.tabs.tabBar().setTabTextColor(index, Qt.GlobalColor.darkGreen)
+            self.parent.tabs.tabBar().setStyleSheet("QTabBar::tab:selected { background-color: darkgreen; color: white; }")
 
     def on_load_finished(self, ok):
         self.page_ready = ok
