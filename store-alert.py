@@ -2,6 +2,7 @@ import sys
 import json
 import os
 import platform
+import webbrowser
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QIcon
@@ -80,9 +81,14 @@ class MonitorTab(QWidget):
         self.browser.loadFinished.connect(self.on_load_finished)
         self.browser.urlChanged.connect(self.on_browser_url_changed)
 
+        self.browser.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.browser.customContextMenuRequested.connect(self.show_context_menu)
+
+
         self.load_button.clicked.connect(self.load_url)
         self.monitor_button.clicked.connect(self.toggle_monitoring)
         self.url_input.textChanged.connect(self.on_url_changed)
+
 
     def setup_timers(self):
         self.monitor_timer = QTimer(self)
@@ -246,6 +252,35 @@ class MonitorTab(QWidget):
             self.log("Monitoring resumed after page load.")
         elif not success:
             self.log("Page failed to load.")
+    
+    def check_for_order_code(self):
+        js = "window.getSelection().toString();"
+        self.browser.page().runJavaScript(js, self.handle_selected_order_code)
+
+    def handle_selected_order_code(self, text):
+        import re
+        if not text:
+            return
+        text = text.strip().lower()
+        match = re.fullmatch(r"[a-z0-9]{4}-\d{4}-[a-z0-9]{4}", text)
+        if match:
+            url = f"https://at.eu.logisticsbackoffice.com/dashboard/v2/hurrier/order_details/{text}"
+            webbrowser.open(url)
+            print(f"[Order Link] Opened: {url}")
+        else:
+            print("[Order Link] Selection does not match order code pattern.")
+    
+    def show_context_menu(self, position):
+        menu = QMenu()
+        order_action = menu.addAction("Open Order Details")
+        backoffice_action = menu.addAction("Backoffice")
+
+        action = menu.exec(self.browser.mapToGlobal(position))
+
+        if action == order_action:
+            self.check_for_order_code()
+        elif action == backoffice_action:
+            self.parent.open_backoffice_url(self.parent.tabs.indexOf(self))
 
 class MainApp(QMainWindow):
     def __init__(self):
@@ -332,8 +367,14 @@ class MainApp(QMainWindow):
             rename_action = menu.addAction("Rename Tab")
             close_action = menu.addAction("Close Tab")
             add_action = menu.addAction("Add Tab")
-            action = menu.exec(self.tabs.mapToGlobal(position))
+            backoffice_action = menu.addAction("Backoffice")
+            order_action = menu.addAction("Open in HURRIER")
+        else:
+            add_action = menu.addAction("Add Tab")
 
+        action = menu.exec(self.tabs.mapToGlobal(position))  # <-- Moved here
+
+        if index != -1:
             if action == rename_action:
                 name, ok = QInputDialog.getText(self, "Rename Tab", "New tab name:")
                 if ok and name:
@@ -343,10 +384,14 @@ class MainApp(QMainWindow):
                 self.tabs.removeTab(index)
             elif action == add_action:
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
+            elif action == backoffice_action:
+                self.open_backoffice_url(index)
+            elif action == order_action:
+                self.tabs.widget(index).check_for_order_code()
         else:
-            add_action = menu.addAction("Add Tab")
-            if menu.exec(self.tabs.mapToGlobal(position)) == add_action:
+            if action == add_action:
                 self.add_tab(name=f"Tab {self.tabs.count() + 1}")
+
 
     def load_all_tabs(self):
         for i in range(self.tabs.count()):
@@ -415,6 +460,19 @@ class MainApp(QMainWindow):
                 self.save_tabs()
         else:
             self.add_tab(name="Tab 1")
+    
+    def open_backoffice_url(self, tab_index):
+        tab = self.tabs.widget(tab_index)
+        url = tab.url_input.text()
+        match = re.search(r"updates_list_outlets\[]=(\w+)", url)
+        if match:
+            outlet_code = match.group(1)[-4:]
+            target_url = f"https://portal.foodora.com/pv2/at/p/backoffice/vendors/{outlet_code}"
+            webbrowser.open(target_url)
+            print(f"[Backoffice] Opening: {target_url}")
+        else:
+            print("[Backoffice] No outlet ID found in URL.")
+
 
 
 if __name__ == "__main__":
