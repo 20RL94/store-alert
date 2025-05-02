@@ -2,7 +2,7 @@ import sys
 import json
 import os
 import platform
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
@@ -10,55 +10,46 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QHBoxLayout, QInputDialog, QMenu, QComboBox, QLabel
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEngineProfile
-from PyQt6.QtWebEngineCore import QWebEnginePage
+from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
 from plyer import notification
 import logging
+import re
 import pygame
 
 # Constants
 CONFIG_FILE = "tabs_config.json"
-PROFILE_PATH = os.path.join(os.getcwd(), "browser_profile")  # Persistent profile directory
-ICON_PATHS = {
-    "green": "green_icon.png",
-    "red": "red_icon.png",
-    "black": "black_icon.png"
-}
+PROFILE_PATH = os.path.join(os.getcwd(), "browser_profile")
+ICON_PATHS = {"green": "green_icon.png", "red": "red_icon.png", "black": "black_icon.png"}
+SCAN_INTERVAL = 15000
+RELOAD_INTERVAL = 180000
+MAX_EMPTY_SCANS = 10
+PAUSE_ON_EMPTY_SECONDS = 180
 
-# Suppress Wayland warning
 if platform.system() != "Windows":
     os.environ["QT_QPA_PLATFORM"] = "wayland"
-
 logging.basicConfig(level=logging.ERROR)
-
 if platform.system() == "Windows":
     import winsound
 
 
 class MonitorTab(QWidget):
-    def __init__(self, parent=None, name="Tab", url="", threshold=None, resume_delay=None, auto_monitor=False):
+    def __init__(self, parent=None, name="Tab", url="", threshold=5, resume_delay=1, auto_monitor=False):
         super().__init__(parent)
-        self.page_ready = False
         self.parent = parent
         self.tab_name = name
         self.url = url
-        self.threshold = threshold or 5
-        self.resume_delay = resume_delay or 1
+        self.threshold = threshold
+        self.resume_delay = resume_delay
         self.monitoring = auto_monitor
         self.paused = False
         self.empty_scans = 0
         self.is_flashing = False
         self.flash_state = False
+        self.page_ready = False
 
         self.layout = QVBoxLayout(self)
-
-        # moved into setup_ui to avoid early access
-
         self.setup_ui()
-        self.url_input.textChanged.connect(self.on_url_changed)
         self.setup_timers()
-
-        self.browser.urlChanged.connect(self.on_browser_url_changed)
 
     def setup_ui(self):
         top_bar = QHBoxLayout()
@@ -72,30 +63,26 @@ class MonitorTab(QWidget):
 
         self.threshold_dropdown.addItems([str(i) for i in range(1, 11)])
         self.threshold_dropdown.setCurrentText(str(self.threshold))
-        self.threshold_dropdown.currentTextChanged.connect(self.update_threshold)
+        self.threshold_dropdown.currentTextChanged.connect(lambda v: self.update_config("threshold", v))
 
         self.delay_dropdown.addItems([str(i) for i in range(1, 21)])
         self.delay_dropdown.setCurrentText(str(self.resume_delay))
-        self.delay_dropdown.currentTextChanged.connect(self.update_resume_delay)
+        self.delay_dropdown.currentTextChanged.connect(lambda v: self.update_config("resume_delay", v))
 
-        top_bar.addWidget(self.url_input)
-        top_bar.addWidget(self.load_button)
-        top_bar.addWidget(self.monitor_button)
-        top_bar.addWidget(self.threshold_label)
-        top_bar.addWidget(self.threshold_dropdown)
-        top_bar.addWidget(self.delay_label)
-        top_bar.addWidget(self.delay_dropdown)
-
+        for widget in [self.url_input, self.load_button, self.monitor_button, self.threshold_label,
+                       self.threshold_dropdown, self.delay_label, self.delay_dropdown]:
+            top_bar.addWidget(widget)
         self.layout.addLayout(top_bar)
 
         self.browser = QWebEngineView()
         self.browser.setPage(self.parent.create_browser_page())
         self.layout.addWidget(self.browser)
         self.browser.loadFinished.connect(self.on_load_finished)
-        self.layout.setStretch(1, 80)
+        self.browser.urlChanged.connect(self.on_browser_url_changed)
 
         self.load_button.clicked.connect(self.load_url)
         self.monitor_button.clicked.connect(self.toggle_monitoring)
+        self.url_input.textChanged.connect(self.on_url_changed)
 
     def setup_timers(self):
         self.monitor_timer = QTimer(self)
@@ -105,34 +92,29 @@ class MonitorTab(QWidget):
         self.flash_timer = QTimer(self)
         self.flash_timer.timeout.connect(self.flash_tab_icon)
 
-        self.reload_timer.start(180000)
-        self.set_icon("red")
         self.monitor_timer.setSingleShot(False)
+        self.reload_timer.start(RELOAD_INTERVAL)
+        self.set_icon("red")
 
     def log(self, message):
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{self.tab_name}] {message}")
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [{self.tab_name}] {message}")
 
     def load_url(self):
-        raw_url = self.url_input.text().strip()
-        if not raw_url.startswith("http"):
-            raw_url = "https://" + raw_url
-        self.url = raw_url
-        self.url_input.setText(raw_url)
-        self.page_ready = False  # Reset flag
+        self.url = self.url_input.text().strip()
+        if not self.url.startswith("http"):
+            self.url = "https://" + self.url
+        self.page_ready = False
+        self.url_input.setText(self.url)
         self.browser.load(QUrl(self.url))
-        #self.log(f"Page loaded: {self.url}")
 
     def reload_page(self):
         self.page_ready = False
         if self.monitoring:
-            self.monitor_timer.stop()  # pause scanning
-
-        injected_url, _ = self.parent._inject_date_range(self.url)
-        self.url = injected_url
+            self.monitor_timer.stop()
+        self.url, _ = self.parent._inject_date_range(self.url)
         self.url_input.setText(self.url)
         self.browser.load(QUrl(self.url))
         self.log("Forced page reload with fresh date range.")
-
 
     def check_page(self):
         if not self.page_ready:
@@ -148,9 +130,9 @@ class MonitorTab(QWidget):
             self.pause_monitoring(self.resume_delay * 60)
         elif count == 0:
             self.empty_scans += 1
-            if self.empty_scans >= 10:
+            if self.empty_scans >= MAX_EMPTY_SCANS:
                 self.log("No 'ACCEPTED' in 10 scans. Pausing 3 minutes.")
-                self.pause_monitoring(180)
+                self.pause_monitoring(PAUSE_ON_EMPTY_SECONDS)
                 self.empty_scans = 0
         else:
             self.empty_scans = 0
@@ -159,45 +141,42 @@ class MonitorTab(QWidget):
         self.play_sound()
         total_minutes = (count + 1) * 18
         hours, minutes = divmod(total_minutes, 60)
-        formatted_duration = f"{hours:02}:{minutes:02}"
         notification.notify(
             title=f"[{self.tab_name}] OPEN ORDERS",
-            message=f"COUNT: ({count} Orders).\nSuggested Offline-Duration: {formatted_duration}",
+            message=f"COUNT: ({count} Orders).\nSuggested Offline-Duration: {hours:02}:{minutes:02}",
             timeout=20
         )
         self.log(f"Notification triggered at {count} matches.")
 
     def play_sound(self):
         sound_file = "alert.mp3"
-        if not os.path.exists(sound_file):
-            print(f"Error: {sound_file} not found.")
-            return
-        try:
-            pygame.mixer.init()
-            pygame.mixer.music.load(sound_file)
-            pygame.mixer.music.play()
-        except Exception as e:
-            print(f"Error playing sound: {e}")
+        if os.path.exists(sound_file):
+            try:
+                pygame.mixer.init()
+                pygame.mixer.music.load(sound_file)
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"Error playing sound: {e}")
 
     def toggle_monitoring(self):
-        if not self.monitoring:
-            self.start_monitoring()
-        else:
+        if self.monitoring:
             self.stop_monitoring()
+        else:
+            self.start_monitoring()
 
     def start_monitoring(self):
-        self.monitor_timer.start(15000) #scan interval
         self.monitoring = True
         self.paused = False
         self.monitor_button.setText("Stop Monitor")
         self.start_flashing("green")
+        self.monitor_timer.start(SCAN_INTERVAL)
         self.log("Monitoring started.")
 
     def stop_monitoring(self):
-        self.monitor_timer.stop()
         self.monitoring = False
         self.paused = False
         self.stop_flashing()
+        self.monitor_timer.stop()
         self.set_icon("red")
         self.monitor_button.setText("Start Monitor")
         self.log("Monitoring stopped.")
@@ -212,17 +191,16 @@ class MonitorTab(QWidget):
 
     def resume_monitoring(self):
         self.paused = False
-        self.monitor_timer.start(15000)
+        self.monitor_timer.start(SCAN_INTERVAL)
         self.start_flashing("green")
         self.log("Monitoring resumed.")
 
-    def update_threshold(self, value):
-        self.threshold = int(value)
-        self.log(f"Threshold updated to {self.threshold}")
-
-    def update_resume_delay(self, value):
-        self.resume_delay = int(value)
-        self.log(f"Resume delay updated to {self.resume_delay} minutes.")
+    def update_config(self, key, value):
+        if key == "threshold":
+            self.threshold = int(value)
+        elif key == "resume_delay":
+            self.resume_delay = int(value)
+        self.log(f"{key.replace('_', ' ').capitalize()} updated to {value}")
 
     def start_flashing(self, color="green"):
         self.flashing_color = color
@@ -235,11 +213,10 @@ class MonitorTab(QWidget):
         self.flash_timer.stop()
 
     def flash_tab_icon(self):
-        if not self.is_flashing:
-            return
-        color = "red" if self.flash_state else self.flashing_color
-        self.set_icon(color)
-        self.flash_state = not self.flash_state
+        if self.is_flashing:
+            color = "red" if self.flash_state else self.flashing_color
+            self.set_icon(color)
+            self.flash_state = not self.flash_state
 
     def set_icon(self, color):
         index = self.parent.tabs.indexOf(self)
@@ -261,19 +238,14 @@ class MonitorTab(QWidget):
 
     def on_browser_url_changed(self, qurl):
         self.url_input.setText(qurl.toString())
-    
+
     def on_load_finished(self, success):
         self.page_ready = success
-        if success:
-            self.log("Page finished loading.")
-            if self.monitoring and not self.monitor_timer.isActive() and not self.paused:
-                self.monitor_timer.start(15000)  # resume scanning after reload
-                self.log("Monitoring resumed after page load.")
-        else:
+        if success and self.monitoring and not self.monitor_timer.isActive() and not self.paused:
+            self.monitor_timer.start(SCAN_INTERVAL)
+            self.log("Monitoring resumed after page load.")
+        elif not success:
             self.log("Page failed to load.")
-
-
-
 
 class MainApp(QMainWindow):
     def __init__(self):
