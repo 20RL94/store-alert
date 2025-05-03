@@ -20,7 +20,6 @@ import pygame
 
 CONFIG_FILE = "tabs_config.json"
 PROFILE_PATH = os.path.join(os.getcwd(), "browser_profile")
-ICON_PATHS = {"green": "green_icon.png", "red": "red_icon.png", "black": "black_icon.png"}
 SCAN_INTERVAL = 15000
 RELOAD_INTERVAL = 180000
 
@@ -109,27 +108,45 @@ class MonitorTab(QWidget):
 
     def scan_page(self):
         if self.page_ready:
-            self.browser.page().toPlainText(self.process_text)
+            # run JS to count rows where:
+            #  - 4th cell text === "ACCEPTED"
+            #  - 6th cell text is neither empty nor "-"
+            js = """
+            (function(){
+                const rows = document.querySelectorAll('tr.cape_table_row_0kODB');
+                let n = 0;
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length > 4) {
+                        const status = cells[3].innerText.trim();
+                        const col6   = cells[5].innerText.trim();
+                        if (status === 'ACCEPTED' && col6 !== '' && col6 !== '-') {
+                            n++;
+                        }
+                    }
+                });
+                return n;
+            })();
+            """
+            self.browser.page().runJavaScript(js, self.handle_js_count)
 
-    def process_text(self, text):
-        raw_count = text.count("ACCEPTED")
-        count = max(0, raw_count - 1)
+    # new callback to receive JS count
+    def handle_js_count(self, raw_count):
+        # if there's a header row also marked ACCEPTED, subtract 1; otherwise remove this line
+        count = raw_count
         if count >= self.threshold:
             self.alert_user(count)
-            # log threshold reached
             total_minutes = count * 10
             h, m = divmod(total_minutes, 60)
-            self.parent.log_event(f"Warning: [{self.tab_name}] order: {count} \nSuggestedd Offline: {h:02}:{m:02}")
+            self.parent.log_event(f"Warning: [{self.tab_name}] order: {count}\nSuggestedd Offline: {h:02}:{m:02}")
             self.pause_monitoring(self.resume_delay * 60)
             self.empty_scan_count = 0
         elif count == 0 and self.monitoring and not self.paused:
             self.empty_scan_count += 1
             if self.empty_scan_count >= 5:
-                index = self.parent.tabs.indexOf(self)
-                self.parent.tabs.tabBar().setTabTextColor(index, Qt.GlobalColor.yellow)
-                self.parent.tabs.tabBar().setStyleSheet("QTabBar::tab:selected { background-color: goldenrod; color: white; }")
-                # log auto-pause due to zero scans
-                self.parent.log_event(f"[{self.tab_name}] Paused, No Order \n Resume monitor after 3 Minutes")
+                idx = self.parent.tabs.indexOf(self)
+                self.parent.tabs.tabBar().setTabTextColor(idx, Qt.GlobalColor.yellow)
+                self.parent.log_event(f"[{self.tab_name}] Zero Order scanned\nPaused for 3 Minutes")
                 self.pause_monitoring(180)
                 self.empty_scan_count = 0
         else:
