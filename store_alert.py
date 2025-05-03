@@ -74,12 +74,19 @@ class MonitorTab(QWidget):
         self.browser.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.browser.customContextMenuRequested.connect(self.context_menu)
 
+        self.browser.urlChanged.connect(self.update_current_url)# url sync
+
         self.url_input.textChanged.connect(lambda: setattr(self, 'url', self.url_input.text().strip()))
         self.load_button.clicked.connect(self.load_url)
         self.monitor_button.clicked.connect(self.toggle_monitoring)
 
         self.layout.addLayout(top_bar)
         self.layout.addWidget(self.browser)
+    
+    def update_current_url(self, qurl):
+        url = qurl.toString()
+        self.url = url
+        self.url_input.setText(url)
 
     def init_timers(self):
         self.empty_scan_count = 0
@@ -113,7 +120,9 @@ class MonitorTab(QWidget):
             #  - 6th cell text is neither empty nor "-"
             js = """
             (function(){
-                const rows = document.querySelectorAll('tr.cape_table_row_0kODB');
+                const rows = Array.from(document.querySelectorAll('tr'))
+                    .filter(row => row.className.includes('cape_table_row'));
+
                 let n = 0;
                 rows.forEach(row => {
                     const cells = row.querySelectorAll('td');
@@ -229,7 +238,10 @@ class MonitorTab(QWidget):
             webbrowser.open(url)
 
     def get_state(self):
-        return dict(name=self.tab_name, url=self.url_input.text(), threshold=self.threshold, resume_delay=self.resume_delay)
+        return dict(name=self.tab_name, 
+        url=self.url, 
+        threshold=self.threshold, 
+        resume_delay=self.resume_delay)
 
 
 class MainApp(QMainWindow):
@@ -272,6 +284,8 @@ class MainApp(QMainWindow):
         """Append timestamped message to the right-hand log list."""
         #ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ts = datetime.now().strftime("%H:%M:%S")
+        if self.log_list.count() >= 20:
+            self.log_list.clear()
         self.log_list.addItem(f"{ts} {message}")
 
     def create_profile(self):
