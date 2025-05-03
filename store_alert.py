@@ -8,7 +8,7 @@ import webbrowser
 import traceback
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QListWidget
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout,
     QLineEdit, QPushButton, QHBoxLayout, QInputDialog, QMenu, QComboBox, QLabel
@@ -114,18 +114,22 @@ class MonitorTab(QWidget):
     def process_text(self, text):
         raw_count = text.count("ACCEPTED")
         count = max(0, raw_count - 1)
-        #print(f"[{self.tab_name}] COUNT: c:{count} r:{raw_count}")
         if count >= self.threshold:
             self.alert_user(count)
+            # log threshold reached
+            total_minutes = count * 10
+            h, m = divmod(total_minutes, 60)
+            self.parent.log_event(f"Warning: [{self.tab_name}] order: {count} \nSuggestedd Offline: {h:02}:{m:02}")
             self.pause_monitoring(self.resume_delay * 60)
             self.empty_scan_count = 0
         elif count == 0 and self.monitoring and not self.paused:
             self.empty_scan_count += 1
-            #print(f"[{self.tab_name}] FAILCOUNT: {self.empty_scan_count}")
             if self.empty_scan_count >= 5:
                 index = self.parent.tabs.indexOf(self)
                 self.parent.tabs.tabBar().setTabTextColor(index, Qt.GlobalColor.yellow)
                 self.parent.tabs.tabBar().setStyleSheet("QTabBar::tab:selected { background-color: goldenrod; color: white; }")
+                # log auto-pause due to zero scans
+                self.parent.log_event(f"[{self.tab_name}] Paused, No Order \n Resume monitor after 3 Minutes")
                 self.pause_monitoring(180)
                 self.empty_scan_count = 0
         else:
@@ -155,7 +159,7 @@ class MonitorTab(QWidget):
         try:
             notification.notify(
                 title=f"[{self.tab_name}] OPEN ORDERS",
-                message=f"COUNT: {count}\nOffline: {h:02}:{m:02}", timeout=15)
+                message=f"COUNT: {count}\nSuggestedd Offline: {h:02}:{m:02}", timeout=15)
         except:
             pass
 
@@ -222,17 +226,36 @@ class MainApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Web Monitor")
         self.setGeometry(100, 100, 1200, 800)
-
+        # — replace single-widget central with a split: tabs on left, log on right —
+        container = QWidget()
+        hlayout = QHBoxLayout(container)
+        # configure the tab widget
         self.tabs = QTabWidget()
         self.tabs.setMovable(True)
         self.tabs.setStyleSheet("QTabBar::tab { max-width: 80px; }")
         self.tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.context_menu)
-        self.setCentralWidget(self.tabs)
 
+        # create the right-hand log list
+        self.log_list = QListWidget()
+        self.log_list.setWindowTitle("Event Log")
+        self.log_list.setMaximumWidth(300)
+
+        # assemble
+        hlayout.addWidget(self.tabs)
+        hlayout.addWidget(self.log_list)
+        self.setCentralWidget(container)
+        
         self.persistent_profile = self.create_profile()
         self.init_controls()
         self.load_tabs()
+
+
+    def log_event(self, message):
+        """Append timestamped message to the right-hand log list."""
+        #ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log_list.addItem(f"{ts} {message}")
 
     def create_profile(self):
         os.makedirs(PROFILE_PATH, exist_ok=True)
@@ -284,6 +307,9 @@ class MainApp(QMainWindow):
         tab = MonitorTab(self, name, url, threshold, resume_delay)
         index = self.tabs.addTab(tab, tab.tab_name)
         self.tabs.setCurrentIndex(index)
+        # immediately apply the current global values to this new tab:
+        tab.threshold_dropdown.setCurrentText(self.global_threshold_dropdown.currentText())
+        tab.delay_dropdown.setCurrentText(self.global_delay_dropdown.currentText())
         return tab
 
     def load_all_tabs(self):
