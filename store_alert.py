@@ -17,9 +17,21 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
 from plyer import notification
 import pygame
+def get_resource_path(filename):
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, filename)
+    return os.path.join(os.path.abspath("."), filename)
 
-CONFIG_FILE = "tabs_config.json"
-PROFILE_PATH = os.path.join(os.getcwd(), "browser_profile")
+ # determine a writable base directory (next to the exe when frozen)
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.abspath(".")
+CONFIG_FILE  = os.path.join(BASE_DIR, "tabs_config.json")
+LOG_FILE = os.path.join(BASE_DIR, "monitor.log")
+
+
+
 SCAN_INTERVAL = 15000
 RELOAD_INTERVAL = 180000
 
@@ -27,13 +39,12 @@ if platform.system() != "Windows":
     os.environ["QT_QPA_PLATFORM"] = "wayland"
 
 # Setup error logging
-LOG_FILE = "monitor.log"
 sys.excepthook = lambda exctype, value, tb: open(LOG_FILE, "a").write(
     f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}] Uncaught Exception:\n" +
     "".join(traceback.format_exception(exctype, value, tb)) + "\n")
 
 class MonitorTab(QWidget):
-    def __init__(self, parent, name="Tab", url="", threshold=5, resume_delay=1):
+    def __init__(self, parent, name="Tab", url="", threshold=5, resume_delay=1, max_order_price=100):
         super().__init__(parent)
         self.parent = parent
         self.tab_name = name
@@ -43,10 +54,13 @@ class MonitorTab(QWidget):
         self.monitoring = False
         self.paused = False
         self.page_ready = False
+        self.max_order_price = max_order_price
 
+        self.original_url = url  # preserve the clean config URL
         self.layout = QVBoxLayout(self)
         self.init_ui()
         self.init_timers()
+        self.last_price_alert_time = None
 
     def init_ui(self):
         top_bar = QHBoxLayout()
@@ -55,21 +69,21 @@ class MonitorTab(QWidget):
         self.monitor_button = QPushButton("Start Monitor")
         self.threshold_dropdown = QComboBox()
         self.delay_dropdown = QComboBox()
-        self.threshold_dropdown.currentTextChanged.connect(lambda v: setattr(self, 'threshold', int(v)))
 
         self.threshold_dropdown.addItems(map(str, range(1, 11)))
         self.threshold_dropdown.setCurrentText(str(self.threshold))
+        self.threshold_dropdown.currentTextChanged.connect(lambda v: setattr(self, 'threshold', int(v)))
         self.delay_dropdown.addItems(map(str, range(1, 21)))
         self.delay_dropdown.setCurrentText(str(self.resume_delay))
         self.delay_dropdown.currentTextChanged.connect(lambda v: setattr(self, 'resume_delay', int(v)))
 
         for widget in [self.url_input, self.load_button, self.monitor_button,
-                       QLabel("Threshold:"), self.threshold_dropdown,
+                       QLabel("Order:"), self.threshold_dropdown,
                        QLabel("Delay (min):"), self.delay_dropdown]:
             top_bar.addWidget(widget)
 
         self.browser = QWebEngineView()
-        self.browser.setPage(self.parent.create_browser_page())
+        self.browser.setPage(QWebEnginePage(self.browser))
         self.browser.loadFinished.connect(self.on_load_finished)
         self.browser.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.browser.customContextMenuRequested.connect(self.context_menu)
@@ -77,7 +91,7 @@ class MonitorTab(QWidget):
         self.browser.urlChanged.connect(self.update_current_url)# url sync
 
         self.url_input.textChanged.connect(lambda: setattr(self, 'url', self.url_input.text().strip()))
-        self.load_button.clicked.connect(self.load_url)
+        self.load_button.clicked.connect(lambda: self.load_url(use_original_url=False))
         self.monitor_button.clicked.connect(self.toggle_monitoring)
 
         self.layout.addLayout(top_bar)
@@ -85,8 +99,10 @@ class MonitorTab(QWidget):
     
     def update_current_url(self, qurl):
         url = qurl.toString()
-        self.url = url
-        self.url_input.setText(url)
+        if "redirect" not in url:
+            self.url = url
+            self.url_input.setText(url)
+
 
     def init_timers(self):
         self.empty_scan_count = 0
@@ -96,10 +112,16 @@ class MonitorTab(QWidget):
         self.reload_timer.timeout.connect(self.reload_page)
         self.reload_timer.start(RELOAD_INTERVAL)
 
-    def load_url(self):
-        self.url = self.url_input.text().strip()
+    def load_url(self, use_original_url=False):
+        if use_original_url:
+            self.url = self.original_url.strip()
+        else:
+            self.url = self.url_input.text().strip()
+
+        self.url = self.url.replace("%00", "")
         if not self.url.startswith("http"):
             self.url = "https://" + self.url
+        
         self.url_input.setText(self.url)
         self.page_ready = False
         self.browser.load(QUrl(self.url))
@@ -108,8 +130,9 @@ class MonitorTab(QWidget):
         self.page_ready = False
         if self.monitoring:
             self.monitor_timer.stop()
-        injected_url, _ = self.parent._inject_date_range(self.url)
-        self.url = injected_url
+
+        injected_url, _ = self.parent._inject_date_range(self.original_url)
+        self.url = injected_url.replace("%00", "")
         self.url_input.setText(self.url)
         self.browser.load(QUrl(self.url))
 
@@ -118,48 +141,72 @@ class MonitorTab(QWidget):
             # run JS to count rows where:
             #  - 4th cell text === "ACCEPTED"
             #  - 6th cell text is neither empty nor "-"
-            js = """
-            (function(){
+            js = f"""
+            (function(){{
                 const rows = Array.from(document.querySelectorAll('tr'))
                     .filter(row => row.className.includes('cape_table_row'));
 
-                let n = 0;
-                rows.forEach(row => {
+                let totalCount = 0;
+                let totalSum = 0;
+
+                rows.forEach(row => {{
                     const cells = row.querySelectorAll('td');
-                    if (cells.length > 4) {
+                    if (cells.length > 8) {{
                         const status = cells[3].innerText.trim();
                         const col6   = cells[5].innerText.trim();
-                        if (status === 'ACCEPTED' && col6 !== '' && col6 !== '-') {
-                            n++;
-                        }
-                    }
-                });
-                return n;
-            })();
+                        const priceText = cells[8].innerText.trim();
+                        const leftText = priceText.split('|')[0].trim();
+                        const leftPriceMatch = leftText.match(/EUR\\s+(\\d+\\.\\d+)/);
+                        const price = leftPriceMatch ? parseFloat(leftPriceMatch[1]) : null;
+
+                        if (status === 'ACCEPTED' && col6 !== '' && col6 !== '-' && price !== null) {{
+                            totalCount++;
+                            totalSum += price;
+                        }}
+                    }}
+                }});
+
+                const average = totalCount > 0 ? totalSum / totalCount : 0;
+                return [totalCount, totalSum, average];
+            }})();
             """
             self.browser.page().runJavaScript(js, self.handle_js_count)
 
     # new callback to receive JS count
-    def handle_js_count(self, raw_count):
-        # if there's a header row also marked ACCEPTED, subtract 1; otherwise remove this line
-        count = raw_count
-        if count >= self.threshold:
-            self.alert_user(count)
-            total_minutes = count * 10
+    def handle_js_count(self, result):
+        if not isinstance(result, list) or len(result) != 3:
+            return
+
+        total_count, total_sum ,avg = result
+        avg_price = float(avg)
+
+        # ✅ Price-limit notification only (textlist)
+        if avg_price >= self.max_order_price and total_count > 0:
+            now = datetime.now()
+            if not self.last_price_alert_time or (now - self.last_price_alert_time).total_seconds() >= 120: #Pause for 2 minutes
+                self.parent.log_event(f"💶 {self.tab_name.upper()} Monitoring: {total_count} Order(s)\n💶 AVG ORDER: €{avg_price:.2f}")
+                self.last_price_alert_time = now
+        # ✅ Threshold logic remains unchanged
+        if total_count >= self.threshold:
+            self.alert_user(total_count)
+            total_minutes = total_count * 10
             h, m = divmod(total_minutes, 60)
-            self.parent.log_event(f"Warning: [{self.tab_name}] order: {count}\nSuggestedd Offline: {h:02}:{m:02}")
+            msg = f"🛍️ {self.tab_name.upper()} order: {total_count}\n🕛Suggestion: {h:02}:{m:02}"
+            self.parent.log_event(msg)
             self.pause_monitoring(self.resume_delay * 60)
             self.empty_scan_count = 0
-        elif count == 0 and self.monitoring and not self.paused:
+        elif total_count == 0 and self.monitoring and not self.paused:
             self.empty_scan_count += 1
             if self.empty_scan_count >= 5:
                 idx = self.parent.tabs.indexOf(self)
                 self.parent.tabs.tabBar().setTabTextColor(idx, Qt.GlobalColor.yellow)
-                self.parent.log_event(f"[{self.tab_name}] Zero Order scanned\nPaused for 3 Minutes")
+                self.parent.log_event(f"😴 {self.tab_name.upper()} No Order found - check Tab")
                 self.pause_monitoring(180)
                 self.empty_scan_count = 0
         else:
             self.empty_scan_count = 0
+
+
 
     def alert_user(self, count):
         index = self.parent.tabs.indexOf(self)
@@ -171,23 +218,24 @@ class MonitorTab(QWidget):
             else:
                 base_path = os.path.abspath(".")
 
-            sound_path = os.path.join(base_path, "alert.mp3")
+            sound_path = get_resource_path("alert.mp3")
             if os.path.exists(sound_path):
-                pygame.mixer.init()
-                pygame.mixer.music.load(sound_path)
-                pygame.mixer.music.play()
+                if not pygame.mixer.get_init():
+                    pygame.mixer.init()
+                sound = pygame.mixer.Sound(sound_path)
+                sound.play()
         except:
+            self.parent.log_event(f"Sound error: {e}")
             pass
 
-        total_minutes = count * 10
-        h, m = divmod(total_minutes, 60)
-
-        try:
-            notification.notify(
-                title=f"[{self.tab_name}] OPEN ORDERS",
-                message=f"COUNT: {count}\nSuggestedd Offline: {h:02}:{m:02}", timeout=15)
-        except:
-            pass
+        #total_minutes = count * 10
+        #h, m = divmod(total_minutes, 60)
+        #try:
+        #    notification.notify(
+        #        title=f"[{self.tab_name}] OPEN ORDERS",
+        #        message=f"COUNT: {count}\nSuggestedd Offline: {h:02}:{m:02}", timeout=15)
+        #except:
+        #    pass
 
     def toggle_monitoring(self):
         index = self.parent.tabs.indexOf(self)
@@ -220,6 +268,8 @@ class MonitorTab(QWidget):
 
     def on_load_finished(self, ok):
         self.page_ready = ok
+        if ok and self.monitoring and not self.monitor_timer.isActive() and not self.paused:
+            self.monitor_timer.start(SCAN_INTERVAL)
 
     def context_menu(self, pos):
         menu = QMenu()
@@ -238,10 +288,12 @@ class MonitorTab(QWidget):
             webbrowser.open(url)
 
     def get_state(self):
-        return dict(name=self.tab_name, 
-        url=self.url, 
+        return dict(
+        name=self.tab_name, 
+        url=self.original_url, 
         threshold=self.threshold, 
-        resume_delay=self.resume_delay)
+        resume_delay=self.resume_delay,
+        max_order_price=self.max_order_price)
 
 
 class MainApp(QMainWindow):
@@ -269,34 +321,45 @@ class MainApp(QMainWindow):
         self.log_list = QListWidget()
         self.log_list.setWindowTitle("Event Log")
         self.log_list.setMaximumWidth(300)
+        self.log_list.itemDoubleClicked.connect(self.switch_to_tab_from_log)
 
         # assemble
         hlayout.addWidget(self.tabs)
         hlayout.addWidget(self.log_list)
         self.setCentralWidget(container)
         
-        self.persistent_profile = self.create_profile()
         self.init_controls()
         self.load_tabs()
+    
+    def switch_to_tab_from_log(self, item):
+        text = item.text()
+        # Attempt to find tab name as UPPERCASE WORD after emoji or timestamp
+        match = re.search(r"[😴💶🛍️⚠️]\s+([A-Z0-9\-]+)", text)
+        if not match:
+            return
+
+        tab_name = match.group(1).strip()
+
+        # Search for tab with that name
+        for i in range(self.tabs.count()):
+            if self.tabs.tabText(i).strip().upper() == tab_name:
+                self.tabs.setCurrentIndex(i)
+                # Flash the tab
+                tab_bar = self.tabs.tabBar()
+                original_color = tab_bar.tabTextColor(i)
+                tab_bar.setTabTextColor(i, Qt.GlobalColor.magenta)
+                QTimer.singleShot(1000, lambda: tab_bar.setTabTextColor(i, original_color))
+                break
 
 
     def log_event(self, message):
         """Append timestamped message to the right-hand log list."""
         #ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ts = datetime.now().strftime("%H:%M:%S")
-        if self.log_list.count() >= 20:
+        if self.log_list.count() >= 30:
             self.log_list.clear()
         self.log_list.addItem(f"{ts} {message}")
 
-    def create_profile(self):
-        os.makedirs(PROFILE_PATH, exist_ok=True)
-        profile = QWebEngineProfile("Persistent", self)
-        profile.setPersistentStoragePath(PROFILE_PATH)
-        profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
-        return profile
-
-    def create_browser_page(self):
-        return QWebEnginePage(self.persistent_profile, self)
 
     def set_all_thresholds(self, value):
         for i in range(self.tabs.count()):
@@ -308,44 +371,77 @@ class MainApp(QMainWindow):
 
     def init_controls(self):
         layout = QHBoxLayout()
+        layout.setSpacing(12)
+
         self.load_btn = QPushButton("Load All")
         self.monitor_btn = QPushButton("Start Monitor All")
 
+        # Threshold control
         self.global_threshold_dropdown = QComboBox()
         self.global_threshold_dropdown.addItems([str(i) for i in range(1, 11)])
         self.global_threshold_dropdown.setCurrentText("5")
         self.global_threshold_dropdown.currentTextChanged.connect(self.set_all_thresholds)
 
+        threshold_box = QVBoxLayout()
+        threshold_box.addWidget(QLabel("Max Order:"))
+        threshold_box.addWidget(self.global_threshold_dropdown)
+        threshold_widget = QWidget()
+        threshold_widget.setLayout(threshold_box)
+
+        # Delay control
         self.global_delay_dropdown = QComboBox()
         self.global_delay_dropdown.addItems([str(i) for i in range(1, 21)])
-        self.global_delay_dropdown.setCurrentText("1")
+        self.global_delay_dropdown.setCurrentText("15")
         self.global_delay_dropdown.currentTextChanged.connect(self.set_all_delays)
 
+        delay_box = QVBoxLayout()
+        delay_box.addWidget(QLabel("Delay (min):"))
+        delay_box.addWidget(self.global_delay_dropdown)
+        delay_widget = QWidget()
+        delay_widget.setLayout(delay_box)
+
+        # Price control
+        self.global_price_limit = QComboBox()
+        self.global_price_limit.addItems([str(i) for i in range(10, 201, 5)])
+        self.global_price_limit.setCurrentText("70")
+        self.global_price_limit.currentTextChanged.connect(self.set_all_price_limits)
+
+        price_box = QVBoxLayout()
+        price_box.addWidget(QLabel("Limit Avg Price (€):"))
+        price_box.addWidget(self.global_price_limit)
+        price_widget = QWidget()
+        price_widget.setLayout(price_box)
+
+        # Final layout
         layout.addWidget(self.load_btn)
         layout.addWidget(self.monitor_btn)
-        layout.addWidget(QLabel("Global Threshold:"))
-        layout.addWidget(self.global_threshold_dropdown)
-        layout.addWidget(QLabel("Global Delay (min):"))
-        layout.addWidget(self.global_delay_dropdown)
+        layout.addWidget(threshold_widget)
+        layout.addWidget(delay_widget)
+        layout.addWidget(price_widget)
 
         wrap = QWidget()
         wrap.setLayout(layout)
         self.setMenuWidget(wrap)
+
         self.load_btn.clicked.connect(self.load_all_tabs)
         self.monitor_btn.clicked.connect(self.toggle_all_monitoring)
 
-    def add_tab(self, name="Tab", url="", threshold=5, resume_delay=1):
-        tab = MonitorTab(self, name, url, threshold, resume_delay)
+    def add_tab(self, name="Tab", url="", threshold=5, resume_delay=1, max_order_price=100, from_config=False):
+        tab = MonitorTab(self, name, url, threshold, resume_delay, max_order_price)
         index = self.tabs.addTab(tab, tab.tab_name)
         self.tabs.setCurrentIndex(index)
-        # immediately apply the current global values to this new tab:
-        tab.threshold_dropdown.setCurrentText(self.global_threshold_dropdown.currentText())
-        tab.delay_dropdown.setCurrentText(self.global_delay_dropdown.currentText())
+        if not from_config:
+            tab.threshold_dropdown.setCurrentText(self.global_threshold_dropdown.currentText())
+            tab.delay_dropdown.setCurrentText(self.global_delay_dropdown.currentText())
+        else:
+            tab.threshold_dropdown.setCurrentText(str(tab.threshold))
+            tab.delay_dropdown.setCurrentText(str(tab.resume_delay))
         return tab
 
     def load_all_tabs(self):
         for i in range(self.tabs.count()):
-            self.tabs.widget(i).load_url()
+            # use reload_page() so it applies the same date‑range injection and timer reset
+            self.tabs.widget(i).reload_page()
 
     def toggle_all_monitoring(self):
         all_running = all(self.tabs.widget(i).monitoring for i in range(self.tabs.count()))
@@ -392,14 +488,43 @@ class MainApp(QMainWindow):
             webbrowser.open(url)
 
     def load_tabs(self):
+        print("[DEBUG] Checking config file...")
         if not os.path.exists(CONFIG_FILE):
+            print("[DEBUG] Config file not found.")
             self.add_tab(name="Tab 1")
             return
-        with open(CONFIG_FILE, "r") as f:
-            for data in json.load(f):
-                filtered_data = {k: v for k, v in data.items() if k in ['name', 'url', 'threshold', 'resume_delay']}
-                tab = self.add_tab(**filtered_data)
-                tab.load_url()
+
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config_data = json.load(f)
+            print(f"[DEBUG] Loaded config: {len(config_data)} tabs")
+        except json.JSONDecodeError as e:
+            print(f"[ERR] JSON decode error: {e}")
+            self.add_tab(name="Tab 1")
+            return
+        except Exception as e:
+            print(f"[ERR] Unexpected config error: {e}")
+            self.add_tab(name="Tab 1")
+            return
+
+        for i, data in enumerate(config_data):
+            try:
+                filtered_data = {
+                    "name": data.get("name", f"Tab {i+1}"),
+                    "url": data.get("url", ""),
+                    "threshold": int(data.get("threshold", 5)),
+                    "resume_delay": int(data.get("resume_delay", 1)),
+                    "max_order_price": float(data.get("max_order_price", 100))
+                }
+                print(f"[DEBUG] Adding tab: {filtered_data['name']} | Threshold: {filtered_data['threshold']} | Price Limit: {filtered_data['max_order_price']}")
+                tab = self.add_tab(**filtered_data, from_config=True)
+                tab.load_url(use_original_url=True)
+            except Exception as e:
+                print(f"[ERR] Failed to load tab {i+1}: {e}")
+
+    def set_all_price_limits(self, value):
+        for i in range(self.tabs.count()):
+            self.tabs.widget(i).max_order_price = float(value)
 
     def closeEvent(self, event):
         with open(CONFIG_FILE, "w") as f:
@@ -409,6 +534,8 @@ class MainApp(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1)
     win = MainApp()
     win.show()
     sys.exit(app.exec())
