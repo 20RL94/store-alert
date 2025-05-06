@@ -184,7 +184,7 @@ class MonitorTab(QWidget):
         if avg_price >= self.max_order_price and total_count > 0:
             now = datetime.now()
             if not self.last_price_alert_time or (now - self.last_price_alert_time).total_seconds() >= 120: #Pause for 2 minutes
-                self.parent.log_event(f"💶 {self.tab_name.upper()} Monitoring: {total_count} Order(s)\n💶 AVG ORDER: €{avg_price:.2f}")
+                self.parent.log_event(f"💶 {self.tab_name.upper()} Monitoring: {total_count} Order(s)\n          AVG ORDER: €{avg_price:.2f}")
                 self.last_price_alert_time = now
         # ✅ Threshold logic remains unchanged
         if total_count >= self.threshold:
