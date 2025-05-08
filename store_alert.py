@@ -362,7 +362,7 @@ class MainApp(QMainWindow):
         self.log_list.addItem(item)
         self.log_list.setItemWidget(item, label)
 
-        QTimer.singleShot(180_000, lambda: self._fade_and_remove_log_item(item, label))
+        QTimer.singleShot(120_000, lambda: self._fade_and_remove_log_item(item, label))
 
     def switch_to_tab_from_text(self, text):
         match = re.search(r"[😴💶🛍️⚠️]\s+([A-Z0-9\-]+)", text)
@@ -548,6 +548,8 @@ class MainApp(QMainWindow):
         with open(CONFIG_FILE, "w") as f:
             json.dump([self.tabs.widget(i).get_state() for i in range(self.tabs.count())], f)
         event.accept()
+        print("[CLOSE] Window closed.")
+        QTimer.singleShot(100, app.quit) 
     
         
     def _fade_and_remove_log_item(self, item):
@@ -586,6 +588,6 @@ if __name__ == "__main__":
     # ✅ Redirect after patch
     sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1)
     win.show()
-    win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
+    #win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
     exit_code = app.exec()
     os._exit(exit_code)  # Force exit, closes console even if opened via terminal
