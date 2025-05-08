@@ -15,6 +15,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
+from PyQt6.QtWidgets import QGraphicsOpacityEffect
+from PyQt6.QtCore import QPropertyAnimation
+from PyQt6.QtWidgets import QListWidgetItem
 from plyer import notification
 import pygame
 def get_resource_path(filename):
@@ -61,6 +64,7 @@ class MonitorTab(QWidget):
         self.init_ui()
         self.init_timers()
         self.last_price_alert_time = None
+
 
     def init_ui(self):
         top_bar = QHBoxLayout()
@@ -181,17 +185,21 @@ class MonitorTab(QWidget):
         avg_price = float(avg)
 
         # ✅ Price-limit notification only (textlist)
-        if avg_price >= self.max_order_price and total_count > 0:
+        if round(avg_price, 2) >= round(self.max_order_price, 2) and total_count > 0:
             now = datetime.now()
             if not self.last_price_alert_time or (now - self.last_price_alert_time).total_seconds() >= 120: #Pause for 2 minutes
-                self.parent.log_event(f"💶 {self.tab_name.upper()} Monitoring: {total_count} Order(s)\n          AVG ORDER: €{avg_price:.2f}")
+                self.parent.log_event(
+                    f"💶 {self.tab_name.upper()} Monitoring: {total_count} Order(s)\n"
+                    f"{' ' * 17}AVG ORDER: €{avg_price:.2f}")
                 self.last_price_alert_time = now
         # ✅ Threshold logic remains unchanged
         if total_count >= self.threshold:
             self.alert_user(total_count)
             total_minutes = total_count * 10
             h, m = divmod(total_minutes, 60)
-            msg = f"🛍️ {self.tab_name.upper()} order: {total_count}\n🕛Suggestion: {h:02}:{m:02}"
+            msg = (
+                f"🛍️ {self.tab_name.upper()} has {total_count} order(s)\n"
+                f"{' ' * 17}🕛 Suggested offline: {h:02}:{m:02}")
             self.parent.log_event(msg)
             self.pause_monitoring(self.resume_delay * 60)
             self.empty_scan_count = 0
@@ -200,7 +208,9 @@ class MonitorTab(QWidget):
             if self.empty_scan_count >= 5:
                 idx = self.parent.tabs.indexOf(self)
                 self.parent.tabs.tabBar().setTabTextColor(idx, Qt.GlobalColor.yellow)
-                self.parent.log_event(f"😴 {self.tab_name.upper()} No Order found - check Tab")
+                self.parent.log_event(
+                f"😴 {self.tab_name.upper()} has no orders\n"
+                f"{' ' * 17}Check Tab for Error?")
                 self.pause_monitoring(180)
                 self.empty_scan_count = 0
         else:
@@ -321,7 +331,7 @@ class MainApp(QMainWindow):
         self.log_list = QListWidget()
         self.log_list.setWindowTitle("Event Log")
         self.log_list.setMaximumWidth(300)
-        self.log_list.itemDoubleClicked.connect(self.switch_to_tab_from_log)
+        #self.log_list.itemDoubleClicked.connect(self.switch_to_tab_from_log)
 
         # assemble
         hlayout.addWidget(self.tabs)
@@ -330,35 +340,43 @@ class MainApp(QMainWindow):
         
         self.init_controls()
         self.load_tabs()
-    
-    def switch_to_tab_from_log(self, item):
-        text = item.text()
-        # Attempt to find tab name as UPPERCASE WORD after emoji or timestamp
+
+
+
+    def log_event(self, message):
+        ts = datetime.now().strftime("%H:%M:%S")
+        item = QListWidgetItem()
+        label_text = f"{ts} {message}"
+        item.setData(Qt.ItemDataRole.UserRole, label_text)  # used by patch
+
+        from clickable_label import ClickableLabel  # ✅ import your class
+        label = ClickableLabel(label_text)
+        label.doubleClicked.connect(lambda: self.switch_to_tab_from_text(label_text))
+
+        label.setWordWrap(True)
+        label.setContentsMargins(6, 6, 6, 6)
+        label.setStyleSheet("font-size: 12px;")
+        label.adjustSize()
+
+        item.setSizeHint(label.sizeHint())
+        self.log_list.addItem(item)
+        self.log_list.setItemWidget(item, label)
+
+        QTimer.singleShot(180_000, lambda: self._fade_and_remove_log_item(item, label))
+
+    def switch_to_tab_from_text(self, text):
         match = re.search(r"[😴💶🛍️⚠️]\s+([A-Z0-9\-]+)", text)
         if not match:
             return
-
         tab_name = match.group(1).strip()
-
-        # Search for tab with that name
         for i in range(self.tabs.count()):
             if self.tabs.tabText(i).strip().upper() == tab_name:
                 self.tabs.setCurrentIndex(i)
-                # Flash the tab
                 tab_bar = self.tabs.tabBar()
                 original_color = tab_bar.tabTextColor(i)
                 tab_bar.setTabTextColor(i, Qt.GlobalColor.magenta)
                 QTimer.singleShot(1000, lambda: tab_bar.setTabTextColor(i, original_color))
                 break
-
-
-    def log_event(self, message):
-        """Append timestamped message to the right-hand log list."""
-        #ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ts = datetime.now().strftime("%H:%M:%S")
-        if self.log_list.count() >= 30:
-            self.log_list.clear()
-        self.log_list.addItem(f"{ts} {message}")
 
 
     def set_all_thresholds(self, value):
@@ -530,12 +548,44 @@ class MainApp(QMainWindow):
         with open(CONFIG_FILE, "w") as f:
             json.dump([self.tabs.widget(i).get_state() for i in range(self.tabs.count())], f)
         event.accept()
+    
+        
+    def _fade_and_remove_log_item(self, item):
+        effect = QGraphicsOpacityEffect()
+        label.setGraphicsEffect(effect)
+
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setDuration(1000)
+        animation.setStartValue(1.0)
+        animation.setEndValue(0.0)
+
+        def on_finished():
+            row = self.log_list.row(item)
+            if row != -1:
+                self.log_list.takeItem(row)
+
+        animation.finished.connect(on_finished)
+        animation.start()
+    
+
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1)
     win = MainApp()
+    # Optional patch loader
+    try:
+        
+        import patches
+        print("[MAIN] Connecting patch manually")
+        patches.patch(win)
+    except Exception as e:
+        print("[WARN] No patch or patch error:", e)
+    
+    # ✅ Redirect after patch
+    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1)
     win.show()
-    sys.exit(app.exec())
+    win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
+    exit_code = app.exec()
+    os._exit(exit_code)  # Force exit, closes console even if opened via terminal
