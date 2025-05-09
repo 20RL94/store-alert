@@ -1,8 +1,10 @@
 #patches.py
-from datetime import datetime
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QListWidgetItem
 import re
+from datetime import datetime
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation
+from PyQt6.QtWidgets import QListWidgetItem, QGraphicsOpacityEffect
+from clickable_label import ClickableLabel
+
 
 def patch(main_window):
     print("✔ Patch loaded")
@@ -29,7 +31,6 @@ def patch(main_window):
                 break
 
     # Patch the log_list to re-bind all labels as clickable
-    from clickable_label import ClickableLabel
     for i in range(main_window.log_list.count()):
         item = main_window.log_list.item(i)
         label_text = item.data(Qt.ItemDataRole.UserRole)
@@ -48,7 +49,11 @@ def patch(main_window):
 
     def patched_fade_and_remove_log_item(item):
         widget = main_window.log_list.itemWidget(item)
-        if not widget:
+        if widget is None:
+            # fallback removal
+            row = main_window.log_list.row(item)
+            if row != -1:
+                main_window.log_list.takeItem(row)
             return
 
         effect = QGraphicsOpacityEffect()
@@ -72,7 +77,7 @@ def patch(main_window):
     main_window._fade_and_remove_log_item = patched_fade_and_remove_log_item
     print("[PATCH] Custom fade-and-remove applied.")
 
-    from clickable_label import ClickableLabel
+    
     def patched_log_event(message):
         ts = datetime.now().strftime("%H:%M:%S")
         item = QListWidgetItem()

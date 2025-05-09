@@ -587,8 +587,8 @@ if __name__ == "__main__":
         print("[WARN] No patch or patch error:", e)
     
     # ✅ Redirect after patch
-    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1, encoding="utf-8")
+    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "w", buffering=1, encoding="utf-8")
     win.show()
-    win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
+    #win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
     exit_code = app.exec()
     os._exit(exit_code)  # Force exit, closes console even if opened via terminal
