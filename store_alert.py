@@ -1,4 +1,4 @@
-# Lightweight version: Web Monitor (streamlined)
+# store_alert.py
 import sys
 import os
 import json
@@ -18,6 +18,8 @@ from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
 from PyQt6.QtWidgets import QGraphicsOpacityEffect
 from PyQt6.QtCore import QPropertyAnimation
 from PyQt6.QtWidgets import QListWidgetItem
+from clickable_label import ClickableLabel
+
 from plyer import notification
 import pygame
 def get_resource_path(filename):
@@ -42,7 +44,7 @@ if platform.system() != "Windows":
     os.environ["QT_QPA_PLATFORM"] = "wayland"
 
 # Setup error logging
-sys.excepthook = lambda exctype, value, tb: open(LOG_FILE, "a").write(
+sys.excepthook = lambda exctype, value, tb: open(LOG_FILE, "a", encoding="utf-8").write(
     f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}] Uncaught Exception:\n" +
     "".join(traceback.format_exception(exctype, value, tb)) + "\n")
 
@@ -349,7 +351,6 @@ class MainApp(QMainWindow):
         label_text = f"{ts} {message}"
         item.setData(Qt.ItemDataRole.UserRole, label_text)  # used by patch
 
-        from clickable_label import ClickableLabel  # ✅ import your class
         label = ClickableLabel(label_text)
         label.doubleClicked.connect(lambda: self.switch_to_tab_from_text(label_text))
 
@@ -362,7 +363,7 @@ class MainApp(QMainWindow):
         self.log_list.addItem(item)
         self.log_list.setItemWidget(item, label)
 
-        QTimer.singleShot(120_000, lambda: self._fade_and_remove_log_item(item, label))
+        QTimer.singleShot(120_000, lambda: self._fade_and_remove_log_item(item))
 
     def switch_to_tab_from_text(self, text):
         match = re.search(r"[😴💶🛍️⚠️]\s+([A-Z0-9\-]+)", text)
@@ -549,7 +550,7 @@ class MainApp(QMainWindow):
             json.dump([self.tabs.widget(i).get_state() for i in range(self.tabs.count())], f)
         event.accept()
         print("[CLOSE] Window closed.")
-        QTimer.singleShot(100, app.quit) 
+        QTimer.singleShot(50, app.quit) 
     
         
     def _fade_and_remove_log_item(self, item):
@@ -586,8 +587,8 @@ if __name__ == "__main__":
         print("[WARN] No patch or patch error:", e)
     
     # ✅ Redirect after patch
-    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1)
+    sys.stdout = sys.stderr = open(get_resource_path("monitor.log"), "a", buffering=1, encoding="utf-8")
     win.show()
-    #win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
+    win.log_event("🛍️ KRS has 3 order(s)\n                 🕛 Suggested offline: 00:30")
     exit_code = app.exec()
     os._exit(exit_code)  # Force exit, closes console even if opened via terminal
